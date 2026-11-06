@@ -1,0 +1,44 @@
+---
+title: Go SDK
+description: Look up merchant orders, create payments and verify signed webhooks in a Go service.
+---
+
+The Go client uses the standard library and supports Go 1.22 or later. With the SDK source at `./vendor-src/orsunpay-go`, run these commands from your application's module directory:
+
+```shell
+go mod edit -replace github.com/orsuntech/orsunpay/sdks/go=./vendor-src/orsunpay-go
+go mod edit -require github.com/orsuntech/orsunpay/sdks/go@v0.0.0
+```
+
+## Look up an order
+
+Reuse the client for the same merchant and environment. Pass the caller's context so a request can be cancelled.
+
+```go
+import (
+    "context"
+    "os"
+
+    orsunpay "github.com/orsuntech/orsunpay/sdks/go"
+)
+
+func newMerchantClient() (*orsunpay.Client, error) {
+    return orsunpay.NewClient(
+        os.Getenv("ORSUNPAY_API_BASE_URL"),
+        os.Getenv("ORSUNPAY_MERCHANT_ID"),
+        os.Getenv("ORSUNPAY_API_KEY"),
+    )
+}
+
+func orderStatus(ctx context.Context, client *orsunpay.Client, orderID string) (string, error) {
+    result, err := client.RetrievePaymentByOrderID(ctx, orderID)
+    if err != nil {
+        return "", err
+    }
+    return result.Data.Transaction.Status, nil
+}
+```
+
+Pass the persisted key for the attempt when calling `CreateSale`, `CreatePayout`, `CreateRefund` or `CreatePaymentLink`. If a write times out, reconcile the order before trying again. [Errors and retries](/errors)
+
+For a webhook, pass the original request bytes and `r.Header.Values("OrsunPay-Signature")` to `orsunpay.VerifyWebhook` with the signing secrets for that mode. Process a verified event once by its signed ID. [Webhook delivery](/webhooks)

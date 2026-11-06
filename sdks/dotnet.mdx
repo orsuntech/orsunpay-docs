@@ -1,0 +1,41 @@
+---
+title: .NET SDK
+description: Use the C# client to look up payments, request refunds and verify signed webhooks in .NET 8 or later.
+---
+
+Add the supplied `OrsunPay.0.1.0.nupkg` to a local NuGet source. In the project that will call the merchant API, run:
+
+```shell
+dotnet add package OrsunPay --version 0.1.0 --source ./packages
+```
+
+Place the package in `./packages` first, or substitute your organization's package feed.
+
+## Look up an order
+
+Create one client per merchant and mode and reuse it across requests. This example shows its configuration and an asynchronous lookup:
+
+```csharp
+using OrsunPay;
+
+static string Required(string name) =>
+    Environment.GetEnvironmentVariable(name) ?? throw new InvalidOperationException(name);
+
+using var client = new OrsunPayClient(
+    Required("ORSUNPAY_API_KEY"),
+    Required("ORSUNPAY_MERCHANT_ID"),
+    new Uri(Required("ORSUNPAY_API_BASE_URL")));
+
+static async Task<string?> GetOrderStatusAsync(
+    OrsunPayClient client, string orderId, CancellationToken cancellationToken)
+{
+    var result = await client.GetPaymentByOrderAsync(orderId, cancellationToken);
+    return result.Data["transaction"]?["status"]?.GetValue<string>();
+}
+
+var status = await GetOrderStatusAsync(client, "example-order-42", CancellationToken.None);
+```
+
+Create requests take a persisted idempotency key and string amounts such as `"12.30"`. Pass the request's cancellation token to the client. If cancellation occurs after dispatch, look up the original order before deciding whether to retry. [Transaction status](/transaction-status)
+
+For incoming webhooks, capture the raw body bytes, read exactly one `OrsunPay-Signature` header, and call `Webhooks.Verify` with the signing secret for that mode. [Webhook delivery](/webhooks)

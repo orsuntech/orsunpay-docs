@@ -20,7 +20,7 @@ with OrsunPay(
     status = result.data.transaction.status
 ```
 
-The client also creates sales, payouts and payment links. Pass amounts as decimal strings. Persist the idempotency key with the order and supply it as `idempotency_key` on creation. For asyncio, use `async with AsyncOrsunPay(...)` and await each resource call.
+Use `client.payments.retrieve_by_order_id(order_id)` when you have the merchant order reference. The client also lists payments, handles refunds and creates sales, payouts and payment links. Pass amounts as decimal strings. Persist the idempotency key with the order and supply it as `idempotency_key` on creation. For asyncio, use `async with AsyncOrsunPay(...)` and await each resource call.
 
 ## Receive events
 

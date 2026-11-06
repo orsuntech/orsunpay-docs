@@ -78,8 +78,12 @@
             "pages": [
               "sdks/overview",
               "sdks/node",
+              "sdks/go",
               "sdks/php",
-              "sdks/python"
+              "sdks/java",
+              "sdks/dotnet",
+              "sdks/python",
+              "sdks/ruby"
             ]
           },
           {
