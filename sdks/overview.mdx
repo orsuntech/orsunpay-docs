@@ -14,7 +14,8 @@ Choose the client for your server. Each SDK uses the HTTPS API origin assigned t
 | C# | .NET 8+ | [.NET SDK](/sdks/dotnet) |
 | Python | Python 3.11+, synchronous or asyncio | [Python SDK](/sdks/python) |
 | Ruby / Rails | Ruby 3.1+, Bundler for Rails | [Ruby SDK](/sdks/ruby) |
+| Rust | Rust 1.90+, Tokio | [Rust SDK](/sdks/rust) |
 
-All seven clients create sales and payouts, look up and list payments, manage payment links, request and track refunds, and verify webhook signatures. Store the order reference and a stable idempotency key before sending a write. A successful HTTP response can still describe a pending or declined payment. [First payment](/quickstart) · [Payment states](/payments)
+All eight clients create sales and payouts, look up and list payments, manage payment links, request and track refunds, and verify webhook signatures. Store the order reference and a stable idempotency key before sending a write. A successful HTTP response can still describe a pending or declined payment. [First payment](/quickstart) · [Payment states](/payments)
 
 For operations outside your SDK's method list, including usage billing, use the [HTTP reference](/api-overview). For a browser checkout, use the [checkout widget](/js-widget) or [cashier](/cashier). Keep the merchant key on the server.

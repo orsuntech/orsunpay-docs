@@ -1,0 +1,84 @@
+---
+title: Rust SDK
+description: Look up payments, request refunds and verify signed webhooks from an async Rust service.
+---
+
+The `orsunpay` crate supports Rust 1.90 or later and uses Tokio for async HTTP requests. Copy the supplied `rust/src` directory into your application, keeping the crate manifest at `rust/src/Cargo.toml`. Add the path to your application's `Cargo.toml`:
+
+```toml
+[dependencies]
+orsunpay = { version = "0.1.0", path = "rust/src" }
+serde_json = "1"
+```
+
+If you received `orsunpay-0.1.0.crate`, unpack it with `tar -xzf orsunpay-0.1.0.crate` and use the resulting `orsunpay-0.1.0` directory as the dependency path.
+
+## Read the payment for an order
+
+Create a client once per merchant and environment. In your Tokio application, call `order_status(&client, order_id).await` with the original order ID.
+
+```rust
+use orsunpay::Client;
+use std::{env, error::Error};
+
+fn merchant_client() -> Result<Client, Box<dyn Error>> {
+    Ok(Client::new(
+        &env::var("ORSUNPAY_API_BASE_URL")?,
+        &env::var("ORSUNPAY_MERCHANT_ID")?,
+        &env::var("ORSUNPAY_API_KEY")?,
+    )?)
+}
+
+async fn order_status(client: &Client, order_id: &str) -> Result<String, Box<dyn Error>> {
+    let payment = client.get_payment_by_order_id(order_id).await?;
+    let status = payment.data["transaction"]["status"]
+        .as_str()
+        .ok_or("Payment response is missing transaction.status")?;
+    Ok(status.to_owned())
+}
+```
+
+## Create a sale
+
+Save the order ID and idempotency key before sending the request. Replace the example URLs with your application's URLs. An accepted sale can still be pending or declined. [Payment states](/payments)
+
+```rust
+async fn create_sale(
+    client: &orsunpay::Client,
+    order_id: &str,
+    buyer_id: &str,
+    stored_key: &str,
+) -> Result<orsunpay::Response, orsunpay::Error> {
+    let payment = serde_json::json!({
+        "orderId": order_id,
+        "buyerId": buyer_id,
+        "amount": "12.30",
+        "currency": "EUR",
+        "successUrl": "https://shop.example/success",
+        "failureUrl": "https://shop.example/failure",
+        "returnUrl": "https://shop.example/orders",
+        "callbackUrl": "https://shop.example/webhooks/orsunpay"
+    });
+    client.create_sale(payment, stored_key).await
+}
+```
+
+Pass amounts such as `"12.30"` as JSON strings. Persist a distinct idempotency key for each intended sale, payout, payment link or refund before sending it. After an uncertain outcome, reconcile the original operation. Reuse its key and request body if you retry. [Idempotency](/idempotency)
+
+## Verify a webhook
+
+Pass the original request bytes and all values of the `OrsunPay-Signature` header. The verifier requires exactly one header value. It checks the signature and timestamp before returning the JSON event.
+
+```rust
+fn verified_event_id(
+    body: &[u8],
+    signature_headers: &[&str],
+    signing_secret: &str,
+) -> Result<String, Box<dyn std::error::Error>> {
+    let event = orsunpay::verify_webhook(body, signature_headers, &[signing_secret])?;
+    let id = event["id"].as_str().ok_or("Webhook event is missing its ID")?;
+    Ok(id.to_owned())
+}
+```
+
+Deduplicate by the verified event ID before applying the payment change. During signing-secret rotation, pass both active secrets to the verifier. [Webhook delivery](/webhooks)

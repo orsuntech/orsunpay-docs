@@ -83,7 +83,8 @@
               "sdks/java",
               "sdks/dotnet",
               "sdks/python",
-              "sdks/ruby"
+              "sdks/ruby",
+              "sdks/rust"
             ]
           },
           {
