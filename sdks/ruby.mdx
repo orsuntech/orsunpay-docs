@@ -1,0 +1,48 @@
+---
+title: Ruby and Rails SDK
+description: Look up a merchant order from Rails and verify webhook requests before acting on them.
+---
+
+Use the `orsunpay` gem with Ruby 3.1 or later. For a Rails app, place the supplied SDK source under `vendor/orsunpay`, add it to your Gemfile, then run `bundle install`:
+
+```ruby
+gem "orsunpay", path: "vendor/orsunpay"
+```
+
+## Configure the merchant client
+
+```ruby
+# config/initializers/orsunpay.rb
+require "orsunpay"
+
+Rails.application.config.x.orsunpay = OrsunPay::Client.new(
+  base_url: ENV.fetch("ORSUNPAY_API_BASE_URL"),
+  merchant_id: ENV.fetch("ORSUNPAY_MERCHANT_ID"),
+  api_key: ENV.fetch("ORSUNPAY_API_KEY")
+)
+```
+
+From a server-side service or job, look up the existing transaction with the original order ID:
+
+```ruby
+client = Rails.application.config.x.orsunpay
+result = client.retrieve_payment_by_order_id(order_id)
+status = result.data.fetch("transaction").fetch("status")
+```
+
+For sale, payout, payment link and refund creation, persist the key with the order and pass it as `idempotency_key:`. Use decimal strings for amounts and store the returned IDs. [Idempotency](/idempotency)
+
+## Verify an incoming Rails webhook
+
+Use the raw request body rather than Rails' parsed parameters:
+
+```ruby
+event = OrsunPay::Webhook.verify(
+  request.raw_post,
+  request.headers["OrsunPay-Signature"],
+  secrets: [ENV.fetch("ORSUNPAY_WEBHOOK_SECRET")]
+)
+event_id = event.fetch("id")
+```
+
+Handle `OrsunPay::SignatureError` as a rejected delivery. On success, use the event ID to process the change exactly once before returning 2xx. [Webhook delivery](/webhooks)

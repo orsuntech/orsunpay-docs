@@ -7,10 +7,11 @@ description: Server-side TypeScript client for payments, payouts, payment links 
 supports ESM and CommonJS and requires **Node 20 or newer**. Its types are generated from the
 merchant OpenAPI document.
 
-<Warning>
-The package is **not yet published to npm**. Build it from `sdks/node` in the OrsunPay repository
-until the first release; `npm install @orsunpay/node` will work only after that release.
-</Warning>
+Install the supplied package in your server application:
+
+```sh
+npm install ./orsunpay-node-0.1.0.tgz
+```
 
 ## Configure the client
 
@@ -38,6 +39,11 @@ the server.
 | `payments.createSale(params, opts?)`     | `POST /v1/payment/sale`                 |
 | `payments.createPayout(params, opts?)`   | `POST /v1/payment/payout`               |
 | `payments.retrieve(id)`                  | `GET /v1/transactions/{id}`             |
+| `payments.retrieveByOrderId(orderId)`    | `GET /v1/payment?orderId=…`              |
+| `payments.list(filters?)`                | `GET /v1/payment`                        |
+| `refunds.create(paymentId, params, opts?)` | `POST /v1/payment/{id}/refunds`        |
+| `refunds.retrieve(id)`                   | `GET /v1/refunds/{id}`                   |
+| `refunds.list(paymentId, filters?)`      | `GET /v1/payment/{id}/refunds`           |
 | `paymentLinks.create(params, opts?)`     | `POST /v1/payment-links`                |
 | `paymentLinks.list({ limit?, cursor? })` | `GET /v1/payment-links`                 |
 | `paymentLinks.iterate({ limit? })`       | Async iterator over all link pages      |
@@ -45,8 +51,7 @@ the server.
 | `paymentLinks.deactivate(id)`            | `POST /v1/payment-links/{id}/deactivate`|
 | `cashier.createSession`, `cashier.mintGrant`, `cashier.revokeSession`, `cashier.acknowledgeWalletReceipt` | Cashier session routes |
 
-Refunds, payment listing, lookup by order ID and usage billing are not in the SDK yet; call those
-endpoints directly.
+Use `payments.iterate` and `refunds.iterate` to read successive pages as an async iterator. For usage billing, use the [HTTP API](/usage-billing).
 
 Every call resolves to `{ data, idempotencyKey?, replayed, requestId? }`.
 

@@ -1,0 +1,38 @@
+---
+title: Java SDK
+description: Connect a Java or Kotlin server to the merchant API using the JVM client.
+---
+
+The Maven library `com.orsunpay:orsunpay-java` uses Java 17 or newer. To install the supplied SDK sources in your local Maven repository, run `mvn clean install` in the SDK directory. Reference this dependency in your application:
+
+```xml
+<dependency>
+  <groupId>com.orsunpay</groupId>
+  <artifactId>orsunpay-java</artifactId>
+  <version>0.1.0</version>
+</dependency>
+```
+
+## Read the payment for an order
+
+```java
+import com.orsunpay.OrsunPay;
+import java.net.URI;
+
+class MerchantPayments {
+    private final OrsunPay client = new OrsunPay(
+        System.getenv("ORSUNPAY_API_KEY"),
+        System.getenv("ORSUNPAY_MERCHANT_ID"),
+        URI.create(System.getenv("ORSUNPAY_API_BASE_URL"))
+    );
+
+    String statusFor(String orderId) {
+        return client.getPaymentByOrder(orderId)
+            .data().path("transaction").path("status").asText();
+    }
+}
+```
+
+Request types live in `com.orsunpay.Requests`. Supply amounts as decimal strings and persist one idempotency key per sale, payout, link or refund creation. Inspect the payment status before fulfilling the order. [Payment lifecycle](/payments)
+
+Pass the raw HTTP request bytes, the single signature header and the relevant signing secret to `Webhooks.verify`. Deduplicate the verified event before applying it. [Webhook delivery](/webhooks)
