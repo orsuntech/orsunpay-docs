@@ -8,6 +8,7 @@ The `orsunpay` crate supports Rust 1.90 or later and uses Tokio for async HTTP r
 ```toml
 [dependencies]
 orsunpay = { version = "0.1.0", path = "rust/src" }
+serde_json = "1"
 ```
 
 If you received `orsunpay-0.1.0.crate`, unpack it with `tar -xzf orsunpay-0.1.0.crate` and use the resulting `orsunpay-0.1.0` directory as the dependency path.
@@ -34,6 +35,31 @@ async fn order_status(client: &Client, order_id: &str) -> Result<String, Box<dyn
         .as_str()
         .ok_or("Payment response is missing transaction.status")?;
     Ok(status.to_owned())
+}
+```
+
+## Create a sale
+
+Save the order ID and idempotency key before sending the request. Replace the example URLs with your application's URLs. An accepted sale can still be pending or declined. [Payment states](/payments)
+
+```rust
+async fn create_sale(
+    client: &orsunpay::Client,
+    order_id: &str,
+    buyer_id: &str,
+    stored_key: &str,
+) -> Result<orsunpay::Response, orsunpay::Error> {
+    let payment = serde_json::json!({
+        "orderId": order_id,
+        "buyerId": buyer_id,
+        "amount": "12.30",
+        "currency": "EUR",
+        "successUrl": "https://shop.example/success",
+        "failureUrl": "https://shop.example/failure",
+        "returnUrl": "https://shop.example/orders",
+        "callbackUrl": "https://shop.example/webhooks/orsunpay"
+    });
+    client.create_sale(payment, stored_key).await
 }
 ```
 
