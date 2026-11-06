@@ -1,0 +1,61 @@
+---
+title: Authentication and API keys
+sidebarTitle: Authentication
+description: Authenticate server-to-server requests with your merchant API key in the x-api-key header.
+---
+
+Send every merchant API request over HTTPS from your backend with the key in `x-api-key`:
+
+```http
+POST /v1/payment/sale
+Content-Type: application/json
+x-api-key: <your merchant API key>
+Idempotency-Key: <a stable unique key for this payment attempt>
+```
+
+The request body's `merchantId` must belong to that key. Missing or invalid keys, or a mismatched
+merchant ID, return HTTP 401. Keep the key in your server's secret store and exclude it from logs,
+source control, browser code and mobile applications. There is no OAuth flow and no self-service
+sign-up endpoint.
+
+For command-line examples, load `ORSUNPAY_API_KEY` from your secret store and set
+`ORSUNPAY_API_BASE_URL` to `{API_BASE_URL}`, the HTTPS base URL supplied during onboarding. Do not
+paste actual keys into shared scripts or documentation.
+
+Your **webhook signing secret is a different secret**. Do not use the API key to verify webhooks.
+See [webhook verification](/webhooks) for verification and rotation.
+
+## Key format and storage
+
+Keys are `test_` or `live_` followed by 64 hexadecimal characters. OrsunPay stores only a hash.
+The full key is shown **once**, when it is created or rotated; afterwards the cabinet shows only a
+non-secret prefix, last use and expiry. If you lose a key, rotate it.
+
+## Test and live keys
+
+A merchant can hold independent `test_` and `live_` keys. A test key selects only sandbox PSP
+connections; a live key selects only live connections. `livemode` in the transaction response shows
+the authenticated mode. Do not send a mode in the payment body. Use different order IDs and
+idempotency keys for test and live payments. See [environments](/environments).
+
+`NO_CREDENTIALS_FOR_MODE` means there is no appropriate connection for the key's mode. Creating a
+test key can return `TEST_API_KEYS_DISABLED` where test keys are not yet enabled for your
+deployment.
+
+## Rotation
+
+Rotate keys in the merchant cabinet (**API keys**, MFA required) or ask your operator. Rotation
+always applies to one mode, `test` or `live`:
+
+- **Routine rotation.** A new key is issued and earlier keys of that mode keep working until an
+  overlap deadline (24 hours by default; your deployment can configure 0–168 hours). Deploy the new
+  key, then optionally use **Revoke previous keys** to end the overlap early.
+- **Compromise recovery.** Rotate with immediate revocation (`revokePrevious`): the new key is
+  issued and every other key of that mode stops working in the same step.
+
+New authentication attempts fail as soon as revocation commits; requests already authenticated
+may finish. Deactivating a merchant blocks all its keys immediately.
+
+`API_KEY_ROTATION_REQUIRED` (HTTP 401) means the key is a legacy key whose sunset date has passed.
+Rotate it and update your server; retrying the old key does not help. This rejection is not a
+payment decline.

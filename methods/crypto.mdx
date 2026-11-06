@@ -1,0 +1,29 @@
+---
+title: Crypto invoices
+sidebarTitle: Crypto
+description: Create a BitPay hosted invoice for an order and distinguish invoice creation from a confirmed crypto payment.
+---
+
+For a standard merchant API sale, use a **BitPay crypto connection**. Send the order amount as a decimal string in its pricing currency. The connector supports EUR, USD, GBP, CAD, AUD, JPY and CHF, subject to your connection. BitPay presents the payable invoice to the buyer.
+
+The following fragment selects a BitPay connection for a USD order. Use it with your merchant, order, buyer and return URLs in the [full sale request](/create-sale).
+
+```json
+{
+  "amount": "49.00",
+  "currency": "USD",
+  "paymentMethod": "cr_example_bitpay",
+  "paymentMethodInput": {}
+}
+```
+
+## Follow the invoice
+
+1. Send the buyer to the URL returned for the hosted payment. The invoice provides the payment instructions.
+2. Keep the order open while the invoice is new or BitPay reports `paid`. OrsunPay maps both to `PROCESSING`.
+3. Record payment once the verified transaction reaches `SUCCESS`. BitPay's `confirmed` and `complete` can produce that outcome after the invoice checks pass. An exception can keep the sale `PROCESSING` for review.
+4. If the invoice expires, check the original transaction before creating another invoice. Continue handling events for it, since a late confirmation can still arrive. [Webhooks](/webhooks)
+
+## Test the integration
+
+Use a BitPay connection configured for its test environment. Verify that an unpaid or expired invoice leaves the order unfulfilled and that a confirmed payment updates it once. The separate B2BinPay native crypto deposit flow is limited to the sandbox cashier. For the standard sale example above, choose a BitPay connection. [Testing in sandbox](/testing)

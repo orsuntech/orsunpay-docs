@@ -1,0 +1,19 @@
+---
+title: Reconcile an order
+description: Trace a missing or delayed payment using the merchant order ID, OrsunPay transaction and provider record.
+---
+
+Start with the order ID in your system and the mode used to create it. If you have only the order ID, request the transaction with the same merchant key:
+
+```bash
+curl --get "$ORSUNPAY_API_BASE_URL/v1/payment" \
+  --header "x-api-key: $ORSUNPAY_API_KEY" \
+  --data-urlencode "orderId=$ORDER_ID"
+```
+
+1. Match the transaction ID, amount, currency and action to your order. Distinguish a sale from a payout or a separate refund.
+2. Compare the latest stored status with the signed events your webhook handler accepted. Check the event ID if a delivery was retried.
+3. For `PROCESSING` or `PSP_OUTCOME_UNKNOWN`, keep the order pending. Use the existing transaction ID for follow-up. Creating a new sale could charge the buyer twice.
+4. For an unsettled difference, give your operations contact the merchant order ID, transaction ID, UTC time, currency and amount. Use the provider's settlement report to check fees and deposits to your bank.
+
+To review a period, use `GET /v1/payment` with an inclusive `created_gte` and exclusive `created_lt`. Keep these filters fixed and follow `next_cursor` as `starting_after` while `has_more` is true. [Transaction status and pagination](/transaction-status)

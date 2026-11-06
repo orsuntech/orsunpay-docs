@@ -1,0 +1,71 @@
+---
+title: Testing in sandbox
+sidebarTitle: Testing in sandbox
+description: Exercise your integration with a test key, sandbox provider connections and your providers' published test data.
+---
+
+Use your provider's sandbox to test the credentials, redirects and payment outcomes that your integration will rely on. Where your merchant has the **Internal Test** connection enabled, you can also simulate card and test-wallet outcomes inside OrsunPay.
+
+## Set up test mode
+
+1. In the [merchant cabinet](/merchant-cabinet), switch to **Test** mode (every page shows a test banner).
+2. Under **Connections**, add a connection with your provider's **sandbox** credentials. The mode is
+   derived from the credentials, for example:
+
+   | Provider     | Sandbox credentials                                 |
+   | ------------ | --------------------------------------------------- |
+   | Stripe       | `sk_test_…` / `rk_test_…`, or Connect in test mode  |
+   | Checkout.com | Sandbox key (`sk_sbox_…`)                           |
+   | Adyen        | Test endpoint `checkout-test.adyen.com` and its Standard webhook HMAC key |
+   | Revolut      | Sandbox Merchant API secret and webhook signing secret |
+   | Viva         | `environment: demo`                                 |
+   | Volt, Brite, Colibrix | `environment: sandbox`                      |
+   | Ari10, BitPay | `environment: test`                                |
+
+   A test key never uses a live connection, and a live key never uses a sandbox connection.
+3. Under **API keys**, create a `test_…` key. If this returns `TEST_API_KEYS_DISABLED`, test keys are
+   not yet enabled for your deployment.
+4. Under **Webhooks**, set the **test** endpoint URL and issue the test signing secret. Test events
+   are delivered only there, signed with the test secret; without a test endpoint no test webhook
+   is sent. The endpoint must be a public HTTPS URL (use a tunnel for a local receiver).
+
+## What to test
+
+| Scenario                    | How                                                                  | Expected                                                         |
+| --------------------------- | -------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| Successful sale             | [Create a sale](/quickstart), pay with a provider success test card  | `transaction.updated` with `SUCCESS`, `livemode: false`          |
+| Refused payment attempt | Use the provider’s decline test data | Leave the order unfulfilled. An Adyen session can stay `PROCESSING` after a refused attempt. |
+| Abandoned payment | Close the payment page without paying | Leave the order unfulfilled. Check the recorded status when the session expires. |
+| Retry with the same key     | Repeat a create with identical body and `Idempotency-Key`            | Same response, `Idempotency-Replayed: true`                      |
+| Key reused with another body | Change the body, keep the key                                       | `422 IDEMPOTENCY_KEY_REUSED`                                     |
+| Duplicate order             | New key, same `orderId`                                              | `409 DUPLICATE_ORDER_ID` with `existingTransactionId`            |
+| Money as a number           | Send `"amount": 12.3`                                                | `400` validation error                                           |
+| Webhook verification        | Tamper with the body or use a wrong secret in your receiver          | Your receiver rejects it                                         |
+| Duplicate delivery          | Process the same event `id` twice                                    | Second delivery is acknowledged without a second effect          |
+| Refund                      | Refund a successful sandbox sale on a supported provider             | `refund.succeeded` or `refund.failed`                            |
+
+## Provider test data
+
+Use the test cards and scenarios published by each provider:
+
+- Stripe: [Testing](https://docs.stripe.com/testing)
+- Adyen: [Test card numbers](https://docs.adyen.com/development-resources/test-cards-and-credentials/test-card-numbers)
+- Checkout.com: [Test cards](https://www.checkout.com/docs/developer-resources/testing/test-cards)
+- Viva: [Test cards and environments](https://developer.viva.com/integration-reference/test-cards-and-environments/)
+- Mollie: [Testing](https://docs.mollie.com/reference/testing) (Mollie's test payment screen lets you choose the outcome)
+- Revolut: [Set up sandbox](https://developer.revolut.com/docs/guides/merchant/test-and-go-live/set-up-sandbox)
+
+## Internal Test simulation
+
+If your operator has enabled Internal Test for your merchant, use the synthetic card or test wallet in Test mode. The connection supports EUR, GBP and USD. Its configured scenario can simulate success, decline, a required action, pending, an unknown outcome or cancellation. Use the fixture details shown for the simulator. A pending or unknown result should leave your order open without a second charge attempt.
+
+The simulator covers sale handling within OrsunPay. Qualify each external connection separately using its own sandbox credentials and test data, including the callback from that provider.
+
+## Limits of test mode
+
+- Create test payment links through the payment-links API with your test key. Opening the link uses your merchant’s eligible sandbox connections.
+- The cabinet's **Send test webhook** (`test.ping`) is available in live mode only.
+- Sandbox behaviour is the provider's; for example, wallet buttons and redirect timing depend on
+  the provider's test environment.
+- Test and live data never mix: test transactions, customers, webhook settings and order IDs are
+  separate from live ones.

@@ -1,0 +1,17 @@
+---
+title: Go live
+description: Verify your checkout, credentials and order handling before accepting the first live payment.
+---
+
+| Check | What to verify |
+| --- | --- |
+| Provider and method | Your provider has enabled your live merchant account, currency and payment method. Test credentials and a successful sandbox payment cover only the sandbox connection. |
+| Checkout | On a test order, follow the buyer redirect through success, decline and abandonment. Check what the order shows if the buyer closes the browser before returning. |
+| Orders | A retry with the original idempotency key and body returns the same attempt. A delayed result leaves the order pending. Fulfil only once after matching the successful transaction to the expected order. |
+| Webhooks | Verify signatures on the raw body. Send a duplicate event through your handler and check that it cannot fulfil the order twice. Test the live endpoint and its signing secret separately from test mode. |
+| Refunds | For each provider offering refunds, exercise a supported refund in the sandbox. Record the refund ID and follow it to its final status. |
+| Support | Confirm who can see the transaction, look up the provider reference and reconcile an order if a webhook is late. |
+
+When these checks pass, enable the live provider connection and switch your backend to the matching live API key and signing secret. For the first authorised live order, match the same transaction across your order system, the merchant cabinet and the provider. Review settlement against the provider's report.
+
+[Sandbox scenarios](/testing) · [Payment methods](/payment-methods) · [Reconcile an order](/reconciliation)

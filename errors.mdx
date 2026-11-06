@@ -1,0 +1,107 @@
+---
+title: Errors and retries
+description: Distinguish validation, business rejection and uncertain outcomes, and retry safely.
+---
+
+Inspect both the HTTP status and the response body. The API currently has several error shapes:
+
+- HTTP 201 can contain `{ "status": false, "error": "..." }` for a business error, such as invalid currency precision or an unavailable payment method.
+- Validation errors use HTTP 400 with `statusCode`, `error` and a `message` array.
+- Structured core errors include `status: false`, `statusCode`, `errorCode`, `error` and `message`.
+- Authentication errors use HTTP 401 with a message. Do not assume every failure has `errorCode`.
+
+`errorCode` values are an **open set**. The tables below list known codes; new codes can appear
+without a version change. Handle an unknown code like other errors of the same HTTP status, and
+never parse the human-readable `message`.
+
+| HTTP | Code / meaning                                                     | Handling                                                                                              |
+| ---- | ------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------- |
+| 201  | `PAYMENT_METHOD_REQUIRED` in a business-error response             | Supply `paymentMethod`; omitting it for a sale requires an enabled hosted payment page                |
+| 201  | `PAYMENT_METHOD_INPUT_WITHOUT_METHOD` in a business-error response | Provide `paymentMethod` with `paymentMethodInput`, or omit both for hosted selection                  |
+| 201  | `NO_PAYMENT_METHODS` in a business-error response                  | No active merchant method accepts this amount/currency; correct the request or merchant configuration |
+| 400  | Validation / `IDEMPOTENCY_KEY_INVALID`                             | Correct the request; money must be a decimal string                                                   |
+| 400  | `CARD_DATA_NOT_ACCEPTED`                                           | Never send PAN, CVV or track data server-to-server; use the linked hosted payment fields documentation |
+| 401  | Invalid or missing key / merchant mismatch                         | Check server credentials and merchant ID                                                              |
+| 409  | `DUPLICATE_ORDER_ID`                                               | Use `existingTransactionId` to reconcile                                                              |
+| 409  | `IDEMPOTENCY_IN_PROGRESS`                                          | Respect `Retry-After`, reuse the same key                                                             |
+| 422  | `IDEMPOTENCY_KEY_REUSED`                                           | Do not change a request under an existing key                                                         |
+| 422  | `ORDER_ID_RESERVED`                                                | Choose an orderId without the reserved `pl_` payment-link prefix; no request reached brain            |
+| 502  | `UPSTREAM_ERROR` / `UPSTREAM_UNAVAILABLE`                          | Outcome may be unknown; retry only with the same key                                                  |
+| 504  | `UPSTREAM_TIMEOUT`                                                 | Operation may still complete; reuse the same key                                                      |
+
+`API_KEY_ROTATION_REQUIRED` is HTTP 401 with that fixed `errorCode` and message: the configured
+legacy-key sunset has passed. Rotate the key in the merchant cabinet or through your operator,
+store the newly issued key securely, and update your server credentials. Retrying the retired
+legacy key will not help. This auth rejection does not imply a payment decline.
+
+Do not mark an order declined solely because a request failed or timed out. Keep an unresolved
+payment pending in your own system until a verified state update or operational reconciliation
+establishes the result. Do not expose internal provider error messages to buyers.
+
+Use transaction ID, order ID, event ID and idempotency key for support correlation. Never attach
+API keys, webhook secrets, signature headers, card details or customer information to logs or tickets.
+
+## Rate limits
+
+The merchant API applies rate limits per merchant (all of its API keys share one quota) and per
+client IP address. Repeated failed authentications from one IP temporarily block that IP, including
+requests with valid keys. Limits are configured per deployment and can change, so read the
+`RateLimit-Policy` and `RateLimit` response headers instead of hard-coding values. A separate
+`auth-in-flight` policy limits concurrent authorization checks per IP and answers with
+`Retry-After: 1`; that response does not mean your API key failed. Reduce concurrency when many
+servers share one egress IP.
+
+HTTP 429 returns `errorCode: RATE_LIMITED`. Wait at least the integer `Retry-After` seconds, then
+retry with **the same `Idempotency-Key` and request body**. Do not create a new payment attempt
+because of throttling. `RateLimit-Policy` describes each evaluated policy's quota and window;
+`RateLimit` gives remaining requests and reset time in seconds. These headers also appear on
+successful merchant API responses. Checkout has a separate limit policy.
+
+`PSP_OUTCOME_UNKNOWN` on an accepted sale appears in
+`transaction.errorCode` alongside `status: true` and a transaction ID. It is
+pending, not declined. No redirect URL is provided. Poll the
+[transaction status](/transaction-status) and wait for a verified webhook or
+operational reconciliation.
+
+## Payment link errors
+
+Payment-link business errors use the structured core error shape. Malformed DTO input instead uses the validation shape (`message` array) and may have no machine-readable code.
+
+| HTTP | Code                                    | Handling                                                                      |
+| ---- | --------------------------------------- | ----------------------------------------------------------------------------- |
+| 400  | `PAYMENT_LINK_INVALID_AMOUNT`           | Use a positive canonical decimal string within the currency exponent.         |
+| 400  | `PAYMENT_LINK_UNSUPPORTED_CURRENCY`     | Select a supported currency code.                                             |
+| 400  | `PAYMENT_LINK_INVALID_EXPIRY`           | Supply a future ISO-8601 timestamp with an explicit timezone.                 |
+| 400  | `PAYMENT_LINK_INVALID_MAX_USES`         | Use an integer from 1 to 1000000; single-use links require 1.                 |
+| 400  | `PAYMENT_LINK_REDIRECT_URL_NOT_ALLOWED` | Use a permitted public HTTPS success/failure URL.                             |
+| 400  | `PAYMENT_LINK_METADATA_TOO_LARGE`       | Reduce the JSON metadata to at most 16 KiB.                                   |
+| 400  | `PAYMENT_LINK_INVALID_TEXT`             | Remove NUL characters and unpaired Unicode surrogates from text and metadata. |
+| 404  | `PAYMENT_LINK_NOT_FOUND`                | Check the link ID and the API key's merchant and live/test mode.              |
+| 400  | `PAYMENT_LINK_INVALID_LIMIT`            | Set the list limit to an integer from 1 to 100.                               |
+| 400  | `PAYMENT_LINK_INVALID_CURSOR`           | Use the nextCursor returned by the same merchant's list response unchanged.   |
+
+The amount schema uses the common money pattern: 1–20 integer digits, up to 18 fractional digits, no leading zeros, sign or exponent notation. The core also enforces positivity and currency precision. Shape violations are rejected by the gateway before forwarding.
+
+Refund creation uses HTTP errors rather than a sale's legacy business-error envelope:
+409 `REFUND_EXCEEDS_AMOUNT` includes amounts reserved by unresolved refunds;
+409 `TRANSACTION_NOT_REFUNDABLE` rejects an ineligible parent sale;
+422 `REFUND_NOT_SUPPORTED` rejects an unsupported connector. Foreign IDs and wrong-mode IDs
+return 404. An accepted refund is still asynchronous: use the refund ID to read its state,
+and reuse the original idempotency key after an uncertain request. See [refunds](/refunds).
+
+For an Adyen hosted session, `ADYEN_REFUSED` with transaction status `PROCESSING`
+means only that one attempt was refused. Keep the order pending and let the
+shopper use the existing session. A later attempt can succeed; session closure
+or expiry produces `EXPIRED`. See [transaction status](/transaction-status#adyen-session-attempts).
+
+## Retry rules
+
+| Situation                                   | Retry?                                                        |
+| ------------------------------------------- | ------------------------------------------------------------- |
+| Network error, timeout, 502, 503, 504       | Yes, with the **same** `Idempotency-Key` and body, with backoff |
+| 429 `RATE_LIMITED`, 409 `IDEMPOTENCY_IN_PROGRESS` | Yes, after `Retry-After`, same key and body             |
+| 400, 401, 404, 422, other 409               | No; fix the request or reconcile the existing object          |
+| HTTP 2xx with `status: false`               | No; it is a business rejection                                |
+| Accepted with `PSP_OUTCOME_UNKNOWN`         | Never resubmit; poll and wait for the webhook                 |
+
+Stop retrying a create after the 24-hour idempotency window and reconcile instead.

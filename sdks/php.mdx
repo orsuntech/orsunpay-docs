@@ -1,0 +1,89 @@
+---
+title: PHP
+description: Configure the PHP HTTP client, look up an order and verify incoming webhooks.
+---
+
+The server-side PHP client supports payments, payment links and refunds. Use the source distribution supplied by your integration contact. It requires 64-bit PHP 8.1+, JSON, hash, a PSR-18 HTTP transport and PSR-17 factories. To call the API without the SDK, use the [HTTP quickstart](/quickstart).
+
+## Look up an order
+
+This example uses Guzzle and Nyholm PSR-7. Disable redirects to keep your API key on its assigned origin and let the SDK manage retries.
+
+```php
+<?php
+use OrsunPay\Client;
+use Nyholm\Psr7\Factory\Psr17Factory;
+
+$factory = new Psr17Factory();
+$client = new Client(
+    apiKey: getenv('ORSUNPAY_API_KEY'),
+    merchantId: getenv('ORSUNPAY_MERCHANT_ID'),
+    baseUrl: getenv('ORSUNPAY_API_BASE_URL'),
+    httpClient: new GuzzleHttp\Client(['timeout' => 30, 'connect_timeout' => 5, 'allow_redirects' => false]),
+    requestFactory: $factory,
+    streamFactory: $factory,
+);
+$transaction = $client->payments()->retrieveByOrderId($orderId)->data->transaction;
+```
+
+## Verify a webhook
+
+`Webhook::constructEvent` authenticates the exact request bytes and then parses the JSON object.
+It throws `OrsunPay\SignatureVerificationException` when verification fails.
+
+```php
+<?php
+use OrsunPay\SignatureVerificationException;
+use OrsunPay\Webhook;
+
+$rawBody = file_get_contents('php://input');            // exact bytes, before any decoding
+$header = $_SERVER['HTTP_ORSUNPAY_SIGNATURE'] ?? null;  // a single header value
+
+try {
+    $event = Webhook::constructEvent($rawBody, $header, [getenv('ORSUNPAY_WEBHOOK_SECRET')]);
+} catch (SignatureVerificationException $e) {
+    http_response_code(400);
+    exit;
+}
+
+$eventId = $event->id();     // deduplicate on this
+$eventType = $event->type(); // for example "transaction.updated"
+```
+
+The default tolerance is 300 seconds (fourth argument); `$secrets` accepts one secret or a list.
+Enforce a body-size limit and reject duplicate signature header lines before calling it. The helper
+verifies the signature only; validate the event shape, merchant, order and `livemode` yourself.
+
+## Money
+
+`OrsunPay\Money::requireAmount($amount)` returns the amount unchanged if it is a valid decimal
+string (see [money format](/idempotency#money-format)) and throws otherwise. It does not check
+currency precision.
+
+## Response models
+
+`OrsunPay\ResponseDecoder` turns a successful (2xx) JSON body that you received with your own HTTP
+client into a typed, read-only model: `decodePaymentResponse`, `decodeTransactionStatusResponse`,
+`decodePaymentList`, `decodeRefundResponse`, `decodeRefundList`, `decodePaymentLink` and
+`decodePaymentLinkList`. A body that is not a JSON object or does not match the model throws
+`OrsunPay\InvalidResponseException` (an `OrsunPayException` with `errorCode` `INVALID_RESPONSE`, no
+response data, not retryable).
+
+```php
+<?php
+use OrsunPay\InvalidResponseException;
+use OrsunPay\ResponseDecoder;
+
+try {
+    $payment = (new ResponseDecoder())->decodePaymentResponse($responseBody);
+} catch (InvalidResponseException $e) {
+    // treat as an unexpected response; do not retry automatically
+}
+```
+
+## Errors and retries
+
+The package also contains an exception hierarchy (`OrsunPayException` with `AuthenticationException`,
+`ValidationException`, `ConflictException`, `IdempotencyException`, `RateLimitException`,
+`UpstreamException`, `ConnectionException`, `PaymentRejectedException`, `InvalidResponseException`), an `ErrorMapper` and a
+`RetryPolicy`, used by the HTTP client.

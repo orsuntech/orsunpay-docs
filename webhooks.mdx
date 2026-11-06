@@ -1,0 +1,220 @@
+---
+title: Webhooks
+description: Verify each delivery with your merchant-specific signing secret before processing it.
+---
+
+In live mode, the sale or payout's `callbackUrl` is a destination for status events. In test mode, configure the separate test endpoint in the cabinet. Use a public HTTPS URL
+(default port 443) without URL credentials; private/local addresses and redirects are rejected.
+Ask your operations contact about any deployment-specific allowed ports.
+
+Each merchant has its own signing secret, issued separately from the API key. Store it
+in your secret manager. A webhook is never intentionally sent unsigned. Rotate the secret in the
+merchant cabinet (**Webhooks**, MFA required; the new secret is shown once) or through your
+operator, and update your receiver at the same time. Rotation takes effect
+immediately: subsequent attempts use only the new secret, including retries of older events.
+There is no dual signing or sender-side grace period. Do not call internal administrative endpoints
+with your merchant API key.
+
+```json
+{
+  "id": "evt_0j7s2pft4v8b9t8nj2cra1eg00",
+  "livemode": false,
+  "api_version": "2026-10-31",
+  "type": "transaction.updated",
+  "created_at": "2026-10-10T10:00:00.000Z",
+  "data": {
+    "transaction": {
+      "id": "tr_example",
+      "orderId": "order_example_001",
+      "status": "SUCCESS",
+      "amount": "12.30",
+      "currency": "EUR"
+    },
+    "paymentData": {}
+  }
+}
+```
+
+This is a shortened synthetic event. `data` may contain additional fields. Amounts are decimal
+strings. Deliveries are at least once and can arrive out of order: **deduplicate by the signed
+body's `id`**, not transaction ID or signature. Event ID and `created_at` stay stable on retries;
+the signature timestamp is refreshed for each delivery attempt.
+
+## Event types
+
+- `transaction.updated`: a sale or payout changed status.
+- `refund.succeeded`: a refund completed successfully.
+- `refund.failed`: a refund failed.
+
+In live mode, refund events use the original sale's `callbackUrl`, falling back to the merchant's configured
+default webhook URL. They use the same [signature verification example](#verify-the-signature)
+and event-ID deduplication as payment events.
+
+```json
+{
+  "id": "evt_0j7s2pft4v8b9t8nj2cra1eg01",
+  "livemode": false,
+  "api_version": "2026-10-31",
+  "type": "refund.succeeded",
+  "created_at": "2026-10-11T10:00:00.000Z",
+  "created": "2026-10-11T10:00:00.000Z",
+  "data": {
+    "refund": {
+      "id": "rf_example",
+      "transactionId": "tr_example",
+      "amount": "5.00",
+      "currency": "EUR",
+      "status": "SUCCEEDED",
+      "reason": "requested_by_customer",
+      "provider": "stripe",
+      "providerRefundId": "re_example",
+      "errorCode": null
+    },
+    "transaction": {
+      "id": "tr_example",
+      "orderId": "order_example_001",
+      "amount": "12.30",
+      "refundedAmount": "5.00",
+      "refundState": "partial"
+    }
+  }
+}
+```
+
+For `refund.failed`, `refund.status` is `FAILED`; `errorCode` may contain a failure code.
+`refundedAmount` totals only successful refunds and never decreases: `SUCCEEDED` is terminal.
+When events arrive out of order, retain the maximum total using decimal arithmetic.
+`refundState` is `none`, `partial`, or `full`.
+All amounts are decimal strings. The transaction summary is a snapshot, not a live balance:
+later refunds do not change an earlier event's body. Use the event's refund ID to reconcile each
+refund and do not replace newer totals with an older delivery. Refund envelopes also expose
+`created` as an ISO-8601 UTC alias of `created_at`; payment envelopes keep their existing shape.
+The body and destination remain fixed across retries and redrives.
+No webhook event is created when neither the sale nor the merchant has a callback URL.
+Use the signed `api_version` to identify the payload version. The [event catalogue](/webhook-events) also covers cashier wallet effects and the receiver test event.
+
+## Temporarily disabled destinations
+
+A destination can be disabled after sustained delivery failure: by default its
+first dead event must be older than five days, at least three distinct events must
+be dead in the last five days, and no delivery may have succeeded in that window.
+The thresholds are configurable. Further deliveries to that destination become
+terminal `ENDPOINT_DISABLED` without an outbound request.
+
+The cabinet Webhooks page shows the host and disable date. A user with webhook
+settings permission can enable it again, optionally requeueing up to 1000 dead
+events from the disable window. The checkbox starts unchecked. Redrives preserve
+event IDs, so continue deduplicating deliveries. A new callback URL has separate
+health; host-only notices are emailed to eligible company users.
+
+## Verify the signature
+
+The `OrsunPay-Signature` header has this form:
+
+```text
+t=<Unix timestamp in seconds>,v1=<64 hexadecimal characters>
+```
+
+The signature is HMAC-SHA256 over the ASCII timestamp, a literal period, and the **exact raw body
+bytes**, using the full issued secret string as the UTF-8 key. Do not decode the secret's hex suffix,
+parse and reserialize JSON, trim whitespace or otherwise change the body before verification.
+Reject timestamps more than 300 seconds from your clock (past or future); keep your clock synchronized.
+Use a constant-time comparison for equal-length signature bytes.
+
+Download dependency-free verification examples for [Node.js](./examples/webhooks/verify.mjs),
+[PHP 8 (64-bit)](./examples/webhooks/verify.php), or
+[Python 3.8+](./examples/webhooks/verify_webhook.py). These use the same raw-byte signature and
+300-second past/future window. PHP uses a conservative 4096-byte header limit; Node and Python
+limit the header to 4096 UTF-16 units.
+
+The Node.js verifier below can be used without the SDK. Save it as `verify-webhook.mjs`:
+
+```js verify-webhook.mjs
+import { createHmac, timingSafeEqual } from "node:crypto";
+
+export function verifyWebhook(
+  rawBody,
+  header,
+  secrets,
+  now = Math.floor(Date.now() / 1000),
+) {
+  if (
+    !Buffer.isBuffer(rawBody) ||
+    typeof header !== "string" ||
+    header.length > 4096
+  )
+    return false;
+  if (!Array.isArray(secrets) || !secrets.length || !Number.isSafeInteger(now))
+    return false;
+  const parts = header.split(",").map((part) => part.trim());
+  const timestamps = parts.filter((part) => part.startsWith("t="));
+  if (timestamps.length !== 1 || !/^t=[0-9]+$/.test(timestamps[0]))
+    return false;
+  const timestampText = timestamps[0].slice(2);
+  const timestamp = Number(timestampText);
+  if (!Number.isSafeInteger(timestamp) || Math.abs(now - timestamp) > 300)
+    return false;
+  const signatures = parts
+    .filter((part) => /^v1=[0-9a-f]{64}$/i.test(part))
+    .map((part) => Buffer.from(part.slice(3), "hex"));
+  if (!signatures.length) return false;
+  return secrets.some((secret) => {
+    if (typeof secret !== "string" || !secret.length) return false;
+    const expected = createHmac("sha256", secret)
+      .update(timestampText + ".", "ascii")
+      .update(rawBody)
+      .digest();
+    return signatures.some((signature) => timingSafeEqual(expected, signature));
+  });
+}
+```
+
+At the HTTP boundary, capture the unmodified body as a `Buffer` before your JSON parser. Enforce a
+request-size limit and reject duplicate `OrsunPay-Signature` header lines before calling the helper.
+Pass the single header value and your current secret as `[process.env.ORSUNPAY_WEBHOOK_SECRET]`;
+reject failed verification before parsing or
+performing any business action. The helper takes a Buffer deliberately: an already-parsed object
+cannot authenticate the original request.
+
+After verification, parse and validate the envelope, check the transaction belongs to your merchant
+and order, then atomically store the event ID and enqueue or apply its effects in your own database.
+Return 2xx **only after durable acceptance**; an already-processed valid duplicate can also return 2xx.
+Do not rely on arrival order, overwrite a newer state with an older event, or fulfill twice.
+`OrsunPay-Event-Id` and `OrsunPay-Event-Type` are convenience headers; use the authenticated body
+for decisions because the HMAC does not cover those headers.
+
+Non-2xx responses and network failures are retried with exponential backoff for approximately
+31 hours under the default schedule; exhausted deliveries need operator redrive. Redrives reuse the event ID, so retain your deduplication records beyond the normal retry
+window. Never log raw webhook bodies, signatures or signing secrets.
+
+## Test and live events
+
+Live and test mode have **separate webhook endpoints and signing secrets**, configured per mode in
+the cabinet. Test-mode events are delivered only to the test endpoint, signed with the test secret;
+the `callbackUrl` of an individual test transaction cannot override that destination, and without a
+test endpoint no test event is delivered. Live events use the sale's `callbackUrl` (refund events
+fall back to the default URL, as described above).
+
+The signed envelope includes `livemode`: `false` for sandbox transactions, `true` for live ones.
+It is copied from the transaction snapshot and stays unchanged on retries and redelivery. Separate
+test/live processing using this signed field after verification. Older queued snapshots without a
+mode use the live default; transaction responses also expose `livemode`.
+
+## Test event: `test.ping`
+
+From the merchant cabinet's **Webhooks** page in live mode, save a default URL and choose
+**Send test webhook** to check connectivity and signature verification before a payment.
+The body has the normal signed envelope and `type: "test.ping"`, with
+`data: { "merchantId": "mr_example", "test": true }`.
+
+Verify `OrsunPay-Signature` against the exact raw body with the same algorithm as
+payment events, then return 2xx. **Perform no business actions for a test event**:
+do not create, fulfil or change an order. `data.test` and `type` identify the ping;
+the envelope's existing `livemode` field is not the test-ping discriminator.
+
+The cabinet shows HTTP status, duration, a safe error class and a journal link.
+Test events are sent once and never automatically retried. Manual redelivery of
+the same test event is disabled; sending another test creates a new event ID.
+If the request times out or recording fails, the receiver may already have accepted
+the ping: check receiver logs before sending again. Tests share the shop's manual
+webhook limit; 429 includes a retry delay. No default URL gives 409.

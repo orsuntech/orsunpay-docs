@@ -1,0 +1,34 @@
+---
+title: "Operator backoffice"
+description: "Investigate a transaction, review a held payout and trace an operator decision in OrsunPay Ops."
+---
+
+Authorized operators can sign in to [OrsunPay Ops](https://r1-office.orsunpay.com). Merchant teams can look up their own payments in the [merchant cabinet](/merchant-cabinet).
+
+## Investigate a payment
+
+1. Open **Transactions**. Select the company in the sidebar. Platform operators with cross-company access can search **All companies** and open a result to switch to its company.
+2. Choose **Transaction ID** or **Order reference** in the search field and enter the exact value. Check the merchant, amount, currency and creation time before opening the transaction ID.
+3. Open **History** to see status changes with timestamps in UTC. **Diagnostics** shows the processing evidence recorded for that transaction. Where your role allows, use **Callbacks** for messages received from the provider and **Webhooks** for delivery to the merchant.
+4. If the merchant saw a different result, compare the timestamp of the payment's status change with the timestamp and outcome of the delivery attempt. Give support the transaction ID and the UTC time of the discrepancy.
+
+## Review a held payout
+
+The approval queue contains payouts waiting for an operator decision. To review incoming bank settlements from a provider, use **Payments → Payouts** in the merchant cabinet.
+
+1. In the company's **Transactions** view, change **All actions** to **Payout** and select **Only waiting approval**. This selects the `WAIT_APPROVE` status.
+2. Open a matching transaction. Confirm the merchant, order, amount and currency against the payout request, and review **History**.
+3. If you have permission to decide, choose **Approve** to send the payout to processing or **Deny** to decline it. Review the ID in the confirmation dialog, enter your reason and confirm.
+4. Refresh the transaction and check **History** for the recorded decision. Approval starts processing. Use subsequent status updates to establish whether the payout succeeded. If a request times out, refresh the history before trying again.
+
+<video controls playsInline preload="none" poster="/media/offices/ops-payout-queue.webp" aria-label="Find payouts waiting for operator approval">
+  <source src="/media/offices/ops-payout-queue.webm" type="video/webm" />
+</video>
+
+The recording filters a local demo workspace to payouts awaiting approval. All transactions are synthetic. It stops at the filtered queue, before any decision.
+
+## Trace an action in the audit log
+
+Open **Administration → Audit log**. Select **Operator audit** for actions performed in Ops, or **Cabinet audit** for merchant-user activity. Locate the entry by time, actor or action and open its UTC timestamp. Check the target, result and request ID when present. **Export CSV (this page)** downloads the loaded page of results.
+
+Operator roles govern access to companies, transaction details and decisions. Merchant impersonation is read-only. If a decision is unavailable, check the company, the payment's current status and your operator permissions.

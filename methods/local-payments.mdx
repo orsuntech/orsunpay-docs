@@ -1,0 +1,45 @@
+---
+title: Local payment methods
+description: Match local bank, app, voucher and pay-later options to the connection and buyer inputs they require.
+---
+
+Select the provider connection for the buyer's method and market, or let checkout present eligible methods. The providers below implement these combinations. Your provider contract determines which you can activate.
+
+| Method | Provider connections | Example processing currency |
+| --- | --- | --- |
+| iDEAL | Adyen, Mollie, Ari10, Colibrix ONE | EUR |
+| Bancontact | Mollie, Ari10, Colibrix ONE | EUR |
+| EPS | Adyen, Mollie, Colibrix ONE | EUR |
+| BLIK | Mollie, Ari10, Colibrix ONE | PLN |
+| Przelewy24 | Mollie, Checkout.com, Colibrix ONE | PLN or EUR |
+| MB WAY, Multibanco | Adyen, Colibrix ONE | EUR |
+| MobilePay, Trustly | Adyen | DKK or EUR |
+| paysafecard | Adyen, Ari10, Colibrix ONE | EUR |
+| Pay later | Comgate | CZK or EUR |
+| Swish, MyBank, Havale, PayU, Paysafecash | Colibrix ONE | SEK for Swish, TRY for Havale, PLN for PayU, EUR for MyBank and Paysafecash |
+
+Colibrix ONE is sandbox-only. Mollie, Comgate and Ari10 return provider redirects. Adyen opens a hosted session restricted to the selected method and requires `customer.email` and `customer.country`. [Adyen setup](/methods/cards#adyen)
+
+## Przelewy24 through Checkout.com
+
+Name your Checkout.com Przelewy24 connection, use EUR or PLN, and include a valid buyer email and holder name in `customer`. Both names below are examples. Open the redirect URL from the sale response so the buyer can authorize the payment. Mollie also supports Przelewy24 through its own connection.
+
+```json
+{
+  "amount": "89.00",
+  "currency": "PLN",
+  "paymentMethod": "cr_example_checkout_p24",
+  "paymentMethodInput": {},
+  "customer": {
+    "firstName": "Anna",
+    "lastName": "Nowak",
+    "email": "anna@example.com"
+  }
+}
+```
+
+## App approvals and vouchers
+
+Colibrix sandbox methods require email, first name and last name. Supply buyer details on the sale or let hosted checkout collect the fields it requests. Swish also needs a Swedish mobile number and MB WAY a Portuguese mobile number. BLIK, Swish and MB WAY can ask the buyer to confirm in an app. Multibanco and Paysafecash can present a voucher or reference for later payment.
+
+Keep the order pending after showing app instructions or a voucher. In sandbox, close the browser after the instructions appear, then confirm your backend can still record the final provider outcome for the original sale. [Transaction status](/transaction-status)

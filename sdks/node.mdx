@@ -1,0 +1,134 @@
+---
+title: Node SDK
+description: Server-side TypeScript client for payments, payouts, payment links and webhook verification.
+---
+
+`@orsunpay/node` 0.1.0 is a server-side TypeScript/Node client with no runtime dependencies. It
+supports ESM and CommonJS and requires **Node 20 or newer**. Its types are generated from the
+merchant OpenAPI document.
+
+<Warning>
+The package is **not yet published to npm**. Build it from `sdks/node` in the OrsunPay repository
+until the first release; `npm install @orsunpay/node` will work only after that release.
+</Warning>
+
+## Configure the client
+
+```ts
+import { OrsunPay } from "@orsunpay/node";
+
+const client = new OrsunPay({
+  apiKey: process.env.ORSUNPAY_API_KEY!,
+  merchantId: process.env.ORSUNPAY_MERCHANT_ID!,
+  baseUrl: process.env.ORSUNPAY_API_BASE_URL!, // {API_BASE_URL}
+  timeoutMs: 30_000,
+  maxRetries: 2,
+});
+```
+
+There is no default server: `baseUrl` is required and must be HTTPS (plain HTTP is allowed only
+for `localhost` and `127.0.0.1`). Redirects are refused so the API key cannot follow a redirect to
+another host. `merchantId` is set once on the client, not per call. Keep the SDK and your keys on
+the server.
+
+## Operations
+
+| SDK method                               | Route                                   |
+| ---------------------------------------- | --------------------------------------- |
+| `payments.createSale(params, opts?)`     | `POST /v1/payment/sale`                 |
+| `payments.createPayout(params, opts?)`   | `POST /v1/payment/payout`               |
+| `payments.retrieve(id)`                  | `GET /v1/transactions/{id}`             |
+| `paymentLinks.create(params, opts?)`     | `POST /v1/payment-links`                |
+| `paymentLinks.list({ limit?, cursor? })` | `GET /v1/payment-links`                 |
+| `paymentLinks.iterate({ limit? })`       | Async iterator over all link pages      |
+| `paymentLinks.retrieve(id)`              | `GET /v1/payment-links/{id}`            |
+| `paymentLinks.deactivate(id)`            | `POST /v1/payment-links/{id}/deactivate`|
+| `cashier.createSession`, `cashier.mintGrant`, `cashier.revokeSession`, `cashier.acknowledgeWalletReceipt` | Cashier session routes |
+
+Refunds, payment listing, lookup by order ID and usage billing are not in the SDK yet; call those
+endpoints directly.
+
+Every call resolves to `{ data, idempotencyKey?, replayed, requestId? }`.
+
+## Create a sale
+
+```ts
+const { data, replayed } = await client.payments.createSale(
+  {
+    orderId: "order_example_001",
+    buyerId: "buyer_example_001",
+    amount: "12.30",
+    currency: "EUR",
+    successUrl: "https://merchant.example/payment/success",
+    failureUrl: "https://merchant.example/payment/failure",
+    returnUrl: "https://merchant.example/payment/return",
+    callbackUrl: "https://merchant.example/webhooks/orsunpay",
+  },
+  { idempotencyKey: "0b6f2c1e-4c7a-4a43-9a51-6a4b1d7e9f10" }, // your stored UUID
+);
+const redirectUrl = data.paymentPageUrl ?? data.url;
+```
+
+`amount` must be a string; a number is a TypeScript error and throws `TypeError` before any request.
+An accepted payment can still be pending or declined: inspect `data.transaction`. A replayed
+creation returns the original snapshot; use `payments.retrieve(id)` for the current status.
+
+## Idempotency and retries
+
+If you omit `idempotencyKey`, the SDK generates a UUID and reuses it for its own retries. Supply
+and persist your own key so that retries after a process restart are also safe.
+
+The SDK retries GETs and keyed writes after network errors or timeouts, HTTP 502/503/504, 429, and
+409 `IDEMPOTENCY_IN_PROGRESS`, with full-jitter backoff (500 ms base, 8 s cap), honouring
+`Retry-After`. A `Retry-After` above 60 seconds stops automatic retries. Other 4xx responses,
+`paymentLinks.deactivate` and cashier mutations are not retried.
+
+## Errors
+
+| Class                   | Meaning                                                          |
+| ----------------------- | ---------------------------------------------------------------- |
+| `OrsunPayError`         | Base class: status, code, safe message, requestId, idempotencyKey |
+| `AuthenticationError`   | HTTP 401                                                         |
+| `ValidationError`       | HTTP 400                                                         |
+| `ConflictError`         | HTTP 409, with `existingTransactionId` when supplied             |
+| `IdempotencyError`      | HTTP 422                                                         |
+| `RateLimitError`        | HTTP 429, with `retryAfter`                                      |
+| `UpstreamError`         | Upstream failure; `outcomeUnknown` means completion is uncertain |
+| `ConnectionError`       | Network failure or timeout; reconcile rather than assume a decline |
+| `PaymentRejectedError`  | HTTP success with `status: false`                                |
+| `WebhookSignatureError` | Webhook verification failed                                      |
+
+## Verify webhooks
+
+```ts
+import express from "express";
+import { verifyWebhook } from "@orsunpay/node";
+
+const app = express();
+// Register before express.json(), which would discard the original bytes.
+app.post(
+  "/webhooks/orsunpay",
+  express.raw({ type: "application/json", limit: "1mb" }),
+  async (req, res) => {
+    let event;
+    try {
+      event = verifyWebhook({
+        rawBody: req.body,
+        signatureHeader: req.headers["orsunpay-signature"] as string,
+        secrets: [process.env.ORSUNPAY_WEBHOOK_SECRET!],
+      });
+    } catch {
+      res.sendStatus(400);
+      return;
+    }
+    await acceptVerifiedEvent(event); // your code: dedupe on event.id and store durably
+    res.sendStatus(204);
+  },
+);
+```
+
+`verifyWebhook({ rawBody, signatureHeader, secrets, toleranceSeconds?, now? })` checks the
+HMAC-SHA256 signature with a constant-time comparison and a ±300-second default tolerance, then
+parses the JSON object. It does not validate the event schema: check the event type, merchant,
+order, `livemode` and amounts in your code. Reject requests with more than one
+`OrsunPay-Signature` header line. See [webhooks](/webhooks).

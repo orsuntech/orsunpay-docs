@@ -1,0 +1,46 @@
+---
+title: "Merchant cabinet"
+description: "Find a payment, check a webhook delivery and manage the credentials for your shop."
+---
+
+Sign in to the [merchant cabinet](https://r1-cabinet.orsunpay.com) with your company account. Your company can have several shops. Check the company name in the sidebar, the shop shown on the page and the **Test** or **Live** indicator before looking up a payment or changing a setting. A payment created with a test key appears in **Test**.
+
+## Find a payment
+
+1. Open **Payments → Transactions**. The list starts with the last seven days. Choose a longer range if the payment is older.
+2. Enter the exact transaction ID, order ID or PSP reference. If you only know part of the story, use the **Status**, **Method** or **Amount** filters. For example, select **declined** under **Status** to review unsuccessful payments.
+3. Open the matching row. Check the amount, currency and merchant in **Overview**. Open **Timeline** for the sequence of status changes, **Refunds** for refund records or **Webhooks** for delivery information.
+4. Use **Copy ID** to keep the transaction reference for support. To share a report with your finance team, close the drawer, check the active filters and choose **Export CSV** above the table.
+
+<video controls playsInline preload="none" poster="/media/offices/cabinet-transactions.webp" aria-label="Filter the merchant cabinet transaction list to declined payments">
+  <source src="/media/offices/cabinet-transactions.webm" type="video/webm" />
+</video>
+
+The recording shows **Test** in a local demo workspace. Selecting **Status → declined** narrows the table to matching payments. All shops and transactions shown are synthetic.
+
+## Check a missing webhook
+
+1. Find the payment and confirm its mode. Open **Developers → Webhooks** in that same mode.
+2. Under **Endpoint**, check the destination URL. Open the matching event in the delivery journal to see attempts and HTTP responses.
+3. If delivery failed, correct the problem at the receiving endpoint. If the destination is disabled, re-enable it after the fix. Open the event and choose **Redeliver** when available.
+4. Match the event ID in your application logs. Redelivery preserves the event ID, so your handler should process each event only once. See [webhook verification and retries](/webhooks).
+
+## Manage the shop integration
+
+| Task | Where to go |
+| --- | --- |
+| Connect a payment processor | Open **Connections → Connect provider**. Choose the provider and enter the credentials for that environment. Return to **Connections** to inspect the saved account. |
+| Issue a server key | Open **Developers → API keys**. Check the mode, choose **Create key** or **Roll key**, and complete MFA when prompted. Save the secret in your server's secret store while it is visible. See [key rotation](/authentication#rotation). |
+| Choose which connection handles a sale | Open **Routing**. Review the draft and simulate representative payments before publishing. See [routing flows](/routing#routing-flows-in-the-merchant-cabinet). |
+| Collect a payment without writing code | Open **Payment links & Invoices**. Use the payment link tab for a shareable checkout URL or the invoices tab to prepare a customer invoice. See [payment links](/payment-links). |
+| Request a refund | Open the original sale under **Payments → Transactions** and choose **Refund** if eligible. Check the refundable balance, enter the amount and reason, then review the refund's own status. See [refunds](/refunds). |
+| Reconcile a provider payout | Open **Payments → Payouts** and select a payout to see its status, reconciliation and available transaction details. The live view currently syncs Stripe payouts. |
+| Manage access | Open **Team & Security** to review members and invitations. Authorized team members can send an invitation and choose the recipient's role. |
+
+## Review your OrsunPay plan
+
+Open **Account → Billing**. In **Live**, **Available plans** shows the offers available to your company. For **Free** or **Growth**, choose **Review** next to the offer, compare the monthly fee and transaction rates, and check the effective date before confirming. An authorized billing administrator can select a plan. **Current pricing** and **Invoices** show the agreement and documents for your OrsunPay service.
+
+In **Test**, **Billing** opens the Stripe sandbox. Use a test card to practice the subscription flow and select **Refresh status** to see the confirmed test result. For customer payments, your acquiring provider handles processing fees and settlement under your separate agreement.
+
+API keys, webhook settings and provider credentials are scoped to the shop and environment. Your role controls which actions you can take. If an action is unavailable, confirm the shop and mode, then ask your company owner or administrator to check your permissions.

@@ -1,0 +1,27 @@
+---
+title: Python SDK
+description: Read a payment with the synchronous or asynchronous Python client and verify webhook signatures.
+---
+
+Use Python 3.11 or newer. Install the SDK from the source distribution supplied by your integration contact with `python -m pip install .` in its package directory. To integrate directly over HTTPS, follow the [HTTP quickstart](/quickstart).
+
+## Read a transaction
+
+```python
+import os
+from orsunpay import OrsunPay
+
+with OrsunPay(
+    os.environ["ORSUNPAY_API_KEY"],
+    os.environ["ORSUNPAY_MERCHANT_ID"],
+    os.environ["ORSUNPAY_API_BASE_URL"],
+) as client:
+    result = client.payments.retrieve(transaction_id)
+    status = result.data.transaction.status
+```
+
+The client also creates sales, payouts and payment links. Pass amounts as decimal strings. Persist the idempotency key with the order and supply it as `idempotency_key` on creation. For asyncio, use `async with AsyncOrsunPay(...)` and await each resource call.
+
+## Receive events
+
+Verify the raw HTTP body against the signing secret before parsing or acting on an event. Follow the [webhook receiver guide](/webhooks) for a dependency-free Python example, timestamp validation and duplicate handling.

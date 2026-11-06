@@ -1,0 +1,49 @@
+---
+title: Cards and hosted checkout
+sidebarTitle: Cards
+description: Accept cards through a hosted provider page and handle Adyen and Revolut payment outcomes.
+---
+
+Use a sale-enabled card connection. The buyer enters card details and completes any authentication challenge on the provider's page. Keep card numbers and security codes out of the API request, metadata and logs. [Security](/security)
+
+## Adyen
+
+In **Connections → Connect provider**, select the merchant and Test mode, then choose Adyen. The onboarding form creates an EUR hosted card connection. Enter the merchant account, API key, Hosted Checkout theme ID, Checkout API URL (v72 or later) and Standard webhook HMAC key for the same environment. Register the displayed provider callback URL in Adyen. Use **immediate automatic capture** for card payments.
+
+Supply a valid email and uppercase two-letter country on the sale. For a buyer in the Netherlands, add this to the [sale body](/create-sale), using the actual buyer's details at checkout.
+
+```json
+{
+  "customer": {
+    "email": "buyer@example.com",
+    "country": "NL"
+  }
+}
+```
+
+The buyer opens an Adyen hosted session restricted to the selected method. If the issuer refuses one attempt, the sale can stay `PROCESSING` with `ADYEN_REFUSED`. Let the buyer retry inside that session. The session expires at the earlier of the transaction deadline and one hour after session creation. Reconcile the original transaction before offering another sale. [Adyen session attempts](/transaction-status#adyen-session-attempts)
+
+## Revolut Business
+
+Select Revolut in the same onboarding flow. Enter the Merchant API secret key and the webhook signing secret for your Revolut sandbox or production account. Register the displayed provider callback URL in the matching environment. The form creates an EUR hosted card connection.
+
+Send its connection ID with empty `paymentMethodInput`. Revolut returns a hosted order page, where the buyer sees the options available on your Revolut account. OrsunPay exposes this connection as `card`. A Revolut order in the `authorised` state is still `PROCESSING`. A verified `completed` order with matching amount and currency becomes `SUCCESS`. [Example request](/methods/choose-a-method#select-the-connection-on-your-server)
+
+Saving a connection stores its credentials. Complete a sandbox sale and verify the signed OrsunPay webhook at your endpoint before switching to a live connection.
+
+## Other hosted card connections
+
+| Provider | Buyer experience and setup |
+| --- | --- |
+| Stripe | Stripe Checkout hosts card entry. For a separate Apple Pay or Google Pay button, see [wallets](/methods/wallets). |
+| Mollie | The card connection opens Mollie Checkout for the card payment. |
+| Checkout.com | Its hosted payment page collects card details. Send the buyer's email and two-letter country on the sale. |
+| Viva | Viva Smart Checkout opens for the order. For an OrsunPay hosted page, set the Viva payment source's success and failure URLs to the OrsunPay checkout host followed by `/return/viva`. Viva requires at least 30 minor units, such as `"0.30"` EUR. |
+| Comgate | The card connection opens Comgate's hosted checkout. Allow the OrsunPay outbound IP supplied by your integration contact in your Comgate account. |
+| Colibrix ONE | The sandbox card connection creates a hosted session. The connector currently restricts sales to sandbox. |
+
+For Viva, subscribe the connection’s provider callback URL to Transaction Payment Created (1796) and Transaction Failed (1798). Add Transaction Reversal Created (1797) if you offer refunds.
+
+## Verify a card connection
+
+Complete one successful sandbox payment and one refused attempt with your provider's test data. Check the final transaction by ID, including amount and currency. For Adyen also test a refused attempt followed by a successful retry within one session. For Revolut verify that a pending or authorised order stays unfulfilled. [Sandbox test data](/testing#provider-test-data)

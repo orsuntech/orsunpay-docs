@@ -1,0 +1,164 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "mint",
+  "name": "OrsunPay",
+  "colors": {
+    "primary": "#826300",
+    "light": "#FFCC00",
+    "dark": "#705600"
+  },
+  "navbar": {
+    "links": [
+      {
+        "label": "Support",
+        "href": "https://orsunpay.com/contact"
+      }
+    ],
+    "primary": {
+      "type": "button",
+      "label": "Merchant cabinet",
+      "href": "https://r1-cabinet.orsunpay.com"
+    }
+  },
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Guides",
+        "groups": [
+          {
+            "group": "Start here",
+            "pages": [
+              "index",
+              "quickstart",
+              "go-live"
+            ]
+          },
+          {
+            "group": "Accept a payment",
+            "pages": [
+              "create-sale",
+              "hosted-payment-page",
+              "payment-links",
+              "public-store-page",
+              "js-widget",
+              "cashier"
+            ]
+          },
+          {
+            "group": "Manage payments",
+            "pages": [
+              "payments",
+              "transaction-status",
+              "payouts",
+              "refunds",
+              "reconciliation",
+              "usage-billing"
+            ]
+          },
+          {
+            "group": "Integration essentials",
+            "pages": [
+              "environments",
+              "authentication",
+              "idempotency",
+              "testing",
+              "errors",
+              "security"
+            ]
+          },
+          {
+            "group": "Events",
+            "pages": [
+              "webhooks",
+              "webhook-events"
+            ]
+          },
+          {
+            "group": "Server SDKs",
+            "pages": [
+              "sdks/overview",
+              "sdks/node",
+              "sdks/php",
+              "sdks/python"
+            ]
+          },
+          {
+            "group": "Updates",
+            "pages": [
+              "changelog"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Using the API",
+            "pages": [
+              "api-overview"
+            ]
+          },
+          {
+            "group": "Endpoints",
+            "openapi": "openapi.json"
+          }
+        ]
+      },
+      {
+        "tab": "Payment methods",
+        "groups": [
+          {
+            "group": "Method selection",
+            "pages": [
+              "payment-methods",
+              "methods/choose-a-method",
+              "routing"
+            ]
+          },
+          {
+            "group": "Method guides",
+            "pages": [
+              "methods/cards",
+              "methods/wallets",
+              "methods/bank-payments",
+              "methods/local-payments",
+              "methods/crypto"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Workspaces",
+        "groups": [
+          {
+            "group": "Merchant cabinet",
+            "pages": [
+              "merchant-cabinet"
+            ]
+          },
+          {
+            "group": "Operator backoffice",
+            "pages": [
+              "offices/operator-backoffice"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "description": "Guides, API contracts and workspace walkthroughs for merchants integrating OrsunPay.",
+  "logo": {
+    "light": "/brand/logo-light.svg",
+    "dark": "/brand/logo-dark.svg"
+  },
+  "favicon": "/brand/favicon.svg",
+  "fonts": {
+    "family": "Onest"
+  },
+  "api": {
+    "playground": {
+      "display": "simple"
+    }
+  }
+}

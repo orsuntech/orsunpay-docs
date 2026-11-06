@@ -1,0 +1,71 @@
+---
+title: Idempotency, money and versioning
+sidebarTitle: Idempotency, money, versioning
+description: Contract rules that apply to every merchant API call.
+---
+
+## Idempotency
+
+Send `Idempotency-Key` with every sale or payout. It is optional in the API but strongly recommended.
+Generate a UUID once per payment attempt, persist it with the request, and reuse the same key,
+endpoint and body for retries. Keys allow 1–255 printable ASCII characters with no spaces and are
+scoped to the merchant for 24 hours.
+
+| Situation                                   | Response                                                    | Your next step                                                            |
+| ------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------- |
+| Completed request repeated                  | Original HTTP status and body; `Idempotency-Replayed: true` | Use the stored result                                                     |
+| First request still running                 | 409 `IDEMPOTENCY_IN_PROGRESS`; `Retry-After`                | Wait, then retry the same request and key                                 |
+| Key reused for a different body or endpoint | 422 `IDEMPOTENCY_KEY_REUSED`                                | Correct the request; create a new key only for an intentional new attempt |
+| Malformed key                               | 400 `IDEMPOTENCY_KEY_INVALID`                               | Fix the key before submitting                                             |
+| Existing merchant `orderId`                 | 409 `DUPLICATE_ORDER_ID`, with `existingTransactionId`      | Reconcile the existing transaction                                        |
+
+An `orderId` is unique per merchant across sales and payouts, independently of the idempotency
+window. Changing the idempotency key does not make the same order a new payment.
+
+After a network error, HTTP 502 or HTTP 504, the operation may still complete. Retry with the
+**same** key and identical request. Never infer a decline from a timeout, mint a new order/key to
+bypass a conflict, or retry indefinitely after the 24-hour window: reconcile the existing payment
+through verified webhooks and your operations contact first.
+
+An accepted `PSP_OUTCOME_UNKNOWN` response is also stored and replayed with its
+transaction ID. Replaying creation retrieves that original response; it is not a
+status refresh. Use [GET /v1/transactions/:id](/transaction-status) with the same
+merchant API key to read the current state. A new key or order is not a recovery
+mechanism for an uncertain payment.
+
+`Idempotency-Key` is **required** when creating payment links, refunds, usage events and usage
+subscriptions, and optional when creating usage plans. Each create operation in the API Reference
+shows whether the header is required.
+
+## Money format
+
+Every money field (`amount`, `*Amount`, `processingAmountWithFee`) is a **decimal string in major
+units** of its currency:
+
+| Currency | Correct  | Rejected                 |
+| -------- | -------- | ------------------------ |
+| EUR      | `"12.30"` | `12.3`, `1230`, `"12.345"` |
+| JPY      | `"5000"`  | `5000`, `"1.5"`           |
+| BTC      | `"0.00000001"` | `1e-8`              |
+
+- JSON numbers are rejected with HTTP 400, because a number may already have lost precision.
+- The syntax is 1–20 integer digits with no leading zeros, optionally followed by a period and
+  1–18 decimals. No sign, exponent, spaces or thousands separators.
+- The API also enforces the currency's own precision: more decimals than the currency allows
+  (`"12.345"` EUR, `"1.5"` JPY) are rejected. Sale and payout amounts must be greater than zero.
+- Responses and webhooks use the same format, formatted to the currency's precision
+  (`"5.00"` EUR, `"1.500"` BHD). Nullable money fields are a string or `null`, never a number.
+
+Use a decimal library for arithmetic. Never use binary floating point for accounting.
+
+## Versioning and compatibility
+
+- All paths are under `/v1`. The current contract is the OpenAPI 3.1 document behind the
+  **API Reference** tab.
+- `operationId`s are stable; the [Node SDK](/sdks/node) uses them as method names.
+- `errorCode` values are an **open set**: handle unknown codes as a generic failure of the same
+  HTTP status instead of failing to parse.
+- Responses and webhook payloads can gain new fields, and new webhook event types can be added.
+  Ignore fields and event types you do not use.
+- Webhook events carry an `api_version` fixed when the event is created. See [event versioning](/webhook-events#versioning).
+- Contract changes are recorded in the [changelog](/changelog).

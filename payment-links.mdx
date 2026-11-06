@@ -1,0 +1,64 @@
+---
+title: Payment links
+description: Create and manage links scoped to your merchant API key.
+---
+
+Create a payment link with `POST /v1/payment-links` and a required
+`Idempotency-Key`. Authenticate as described in [Authentication](/authentication).
+Without code, create, copy (also as a QR code) and deactivate links in the merchant cabinet under
+**Payment links**. The cabinet's **Payment links** page is available in live mode only. Links
+created through the API use the mode of the API key: a test key creates a test link, which opens
+with your sandbox provider connections.
+
+```json
+{
+  "amount": "12.34",
+  "currency": "EUR",
+  "description": "Order payment",
+  "reusable": false,
+  "successUrl": "https://merchant.example/success",
+  "failureUrl": "https://merchant.example/failure",
+  "metadata": { "orderReference": "example-order" }
+}
+```
+
+Amounts are positive decimal strings in major units, within the currency's
+precision. Single-use links default to `maxUses: 1`; reusable links have no usage
+limit unless `maxUses` is supplied (1–1,000,000). Optional `expiresAt` is a future
+ISO-8601 timestamp with explicit `Z` or `±hh:mm` offset; timestamps without an
+offset are rejected. Metadata must be a JSON object of at most 16 KiB. Description
+and metadata (including nested values and object keys) must not contain U+0000.
+Redirects use the callback URL policy: production requires HTTPS, disallows
+credentials and private/reserved network destinations, and restricts ports.
+
+The `201` response contains a `pl_` identifier, a random 24-character `slug`,
+string `amount`, `createdAt`, `expiresAt`, usage counts, redirects, metadata,
+`isActive`, `expired`, `status`, and `url`. The URL has the form
+`{CHECKOUT_BASE_URL}/l/<slug>` and is `null` when hosted checkout is disabled.
+Opening links on the hosted payment page requires the separate link-opening
+feature to be deployed; creating a link alone does not initiate a payment.
+
+Retry creation with the same body and key. Within the standard
+[idempotency retention period](/idempotency), the original response is replayed
+with `Idempotency-Replayed: true`, even if the link has since expired or been
+deactivated. Fetch the link to see its current state. A different body using the
+same key returns `422 IDEMPOTENCY_KEY_REUSED`; an in-flight request returns
+`409 IDEMPOTENCY_IN_PROGRESS` and `Retry-After: 1`.
+
+- `GET /v1/payment-links?limit=25` lists your links newest first. Follow the opaque
+  `nextCursor` as `cursor`; a null cursor means the last page. Limit is 1–100.
+- `GET /v1/payment-links/:id` returns the current link. Unknown and other merchants'
+  IDs, including IDs longer than 64 characters, return `404 PAYMENT_LINK_NOT_FOUND`.
+- `POST /v1/payment-links/:id/deactivate` permanently deactivates a link. Repeating
+  this request is safe and returns `200` with the current link.
+
+Status is `INACTIVE` when deactivated, otherwise `EXPIRED` when past expiry,
+`EXHAUSTED` when its usage limit is reached, or `ACTIVE`. These checks use server
+time; expiry does not require a background sweep. `isActive` records explicit
+activation, while `expired` independently reports time expiry.
+
+Invalid creation data returns `400`: `PAYMENT_LINK_INVALID_AMOUNT`,
+`PAYMENT_LINK_UNSUPPORTED_CURRENCY`, `PAYMENT_LINK_INVALID_TEXT`,
+`PAYMENT_LINK_INVALID_EXPIRY`, `PAYMENT_LINK_INVALID_MAX_USES`,
+`PAYMENT_LINK_METADATA_TOO_LARGE`, or `PAYMENT_LINK_REDIRECT_URL_NOT_ALLOWED`.
+Malformed list cursors return `PAYMENT_LINK_INVALID_CURSOR`.

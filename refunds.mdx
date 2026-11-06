@@ -1,0 +1,119 @@
+---
+title: Refunds
+description: Create an idempotent full or partial refund and follow its stored status.
+---
+
+Use the API key for the merchant and mode of the original successful sale. The original sale keeps its `SUCCESS` status, and the refund has its own ID and lifecycle. The merchant API supports eligible Stripe, Mollie, Revolut, Viva, Adyen and Checkout.com sales when the order and processing currencies match. Use the sale's currency for the refund amount. Separately charged fees are excluded. Other connectors return `422 REFUND_NOT_SUPPORTED`.
+
+Revolut refunds use the provider order ID of the original sale and the matching sandbox or production connection. If a request times out, use the original refund ID to follow its outcome. [Revolut card payments](/methods/cards#revolut-business)
+
+Viva refunds additionally require the merchant API key in the connection settings. A timed-out
+Viva refund stays `PROCESSING` for verification; it is never automatically sent a second time.
+
+Adyen refunds require a captured payment and the connection's authenticated Standard webhook.
+An uncertain dispatch stays `PROCESSING` until the signed callback arrives; never create a new
+refund to retry it. Later provider refund failures or reversals require operator reconciliation.
+
+Checkout.com refunds require a captured payment and the connection's signed refund webhooks.
+Acceptance remains `PROCESSING` until the refund outcome arrives. After an uncertain dispatch,
+automatic recovery waits for the webhook; contact operations if it remains unresolved instead
+of creating another refund. Refunds made outside OrsunPay are not imported automatically.
+
+## Create a partial refund
+
+```bash
+curl -X POST "$ORSUNPAY_API_BASE_URL/v1/payment/tr_example/refunds" \
+  -H "x-api-key: $ORSUNPAY_API_KEY" \
+  -H "Idempotency-Key: refund-order-example-001" \
+  -H "Content-Type: application/json" \
+  -d '{"amount":"12.30","reason":"requested_by_customer","metadata":{"case":"return-example"}}'
+```
+
+`amount` is a positive decimal string in the sale's currency, with that currency's precision.
+Omit it to refund the unreserved remainder. Both `PENDING` and `PROCESSING` refunds reserve
+capacity, so another request cannot refund the same remaining money concurrently.
+
+Reasons are `requested_by_customer` (default), `duplicate`, `fraudulent`, or `other`. Metadata
+is optional JSON object data, limited to 16 KiB in UTF-8 and depth 10. Do not include card data,
+secrets or unnecessary personal information.
+
+```json
+{
+  "data": {
+    "id": "rf_example",
+    "transactionId": "tr_example",
+    "amount": "12.30",
+    "currency": "EUR",
+    "status": "PENDING",
+    "reason": "requested_by_customer",
+    "providerRefundId": null,
+    "errorCode": null,
+    "metadata": { "case": "return-example" },
+    "createdAt": "2026-10-11T12:00:00.000Z",
+    "updatedAt": "2026-10-11T12:00:00.000Z"
+  }
+}
+```
+
+HTTP 201 means OrsunPay stored the request and reserved the amount. It does not mean the PSP
+has returned the funds. Execution happens asynchronously. Save `data.id` and poll that refund,
+or consume the signed `refund.succeeded` / `refund.failed` [webhooks](/webhooks).
+
+## Retry safely
+
+`Idempotency-Key` is required. Keep both the key and request unchanged after a network error or
+timeout. The same key replays the same stored response, including the refund ID, with
+`Idempotency-Replayed: true`; it may still show `PENDING` after the refund has completed.
+Use GET for fresh status. A changed request under the same key returns
+`422 IDEMPOTENCY_KEY_REUSED`; a simultaneous request can return `409 IDEMPOTENCY_IN_PROGRESS`
+with `Retry-After`.
+
+The standard [idempotency window](/idempotency) applies. Do not create another refund with a new
+key, or retry creation after that window, merely because an earlier refund is still unresolved.
+Use its ID and contact operations for reconciliation. An unresolved PSP response retains the
+reserved amount; a timeout is not proof of failure.
+
+## Read status
+
+```bash
+curl "$ORSUNPAY_API_BASE_URL/v1/refunds/rf_example" \
+  -H "x-api-key: $ORSUNPAY_API_KEY"
+
+curl "$ORSUNPAY_API_BASE_URL/v1/payment/tr_example/refunds" \
+  -H "x-api-key: $ORSUNPAY_API_KEY"
+```
+
+The single-refund response is `{ "data": { ... } }`; the payment list is
+`{ "data": [ ... ], "nextCursor": null }`. The list accepts `limit` (1–100, default 100) and
+an opaque `cursor` from its previous `nextCursor`. Continue until `nextCursor` is null; do not
+assume the first page contains every partial refund.
+Reads use the authenticated merchant and mode. Missing, foreign-merchant and wrong-mode IDs
+return 404 without exposing another payment. Poll with backoff; GET reads the stored state and
+does not dispatch a PSP request.
+
+| Status       | Meaning                                                              |
+| ------------ | -------------------------------------------------------------------- |
+| `PENDING`    | Reserved and queued; no worker has begun sending it                  |
+| `PROCESSING` | Sent, about to be sent, or outcome still unresolved; keep it pending |
+| `SUCCEEDED`  | PSP confirmed the refund succeeded                                   |
+| `FAILED`     | Refund failed definitively; its reservation is released              |
+| `CANCELED`   | Canceled before dispatch; its reservation is released                |
+
+There is no public cancel endpoint in this release. `PROCESSING` cannot be canceled merely to
+release capacity. A provider reference can arrive while the status stays `PROCESSING`.
+
+## Errors
+
+| HTTP | Code                         | Action                                                                             |
+| ---- | ---------------------------- | ---------------------------------------------------------------------------------- |
+| 400  | `IDEMPOTENCY_KEY_INVALID`    | Supply one valid key                                                               |
+| 400  | Refund input validation      | Correct amount, reason or metadata                                                 |
+| 404  | `REFUND_NOT_FOUND`           | Check the ID, merchant and key mode                                                |
+| 409  | `REFUND_EXCEEDS_AMOUNT`      | Read existing refunds; some capacity may still be reserved                         |
+| 409  | `TRANSACTION_NOT_REFUNDABLE` | Only eligible successful sales in a supported currency arrangement can be refunded |
+| 409  | `IDEMPOTENCY_IN_PROGRESS`    | Wait for `Retry-After`, then reuse the same request/key                            |
+| 422  | `REFUND_NOT_SUPPORTED`       | This connector cannot execute refunds in this release                              |
+| 422  | `IDEMPOTENCY_KEY_REUSED`     | Do not change an existing request's key/body association                           |
+
+Transport failures are not business declines. Reuse the original key while its window is active,
+then read the existing refund. Never show a raw PSP error message to the buyer.

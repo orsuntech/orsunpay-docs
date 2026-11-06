@@ -1,0 +1,37 @@
+---
+title: Pay by bank and bank transfers
+sidebarTitle: Bank payments
+description: Start a bank-funded sale, supply country and currency where required, and reconcile bank payment initiation.
+---
+
+Use a bank payment sale when a buyer is paying you. For a payment from your account to a recipient's bank account, use the [payout guide](/payouts).
+
+| Provider and connection type | How to start |
+| --- | --- |
+| Volt · Pay by bank | Use EUR. The buyer chooses a bank on Volt's hosted checkout. Leave bank selection to the provider. |
+| Brite · Pay by bank | Supply the buyer's two-letter country in `customer.country`. The connector supports EUR, GBP, SEK, DKK and PLN, subject to your connection and provider account. |
+| Comgate · Bank transfer | The bank-transfer connection opens Comgate's hosted bank flow. The connector's bank-transfer currencies are CZK, EUR and PLN. |
+| T365 · Bank transfer | The hosted page uses a regional payment type and buyer contact fields. Your provider agreement determines which payment types and solutions your account can process. |
+| Colibrix ONE · Open banking | A sandbox connection opens a hosted session. Use EUR and supply the buyer's email, first name and last name. |
+
+## Select a bank flow
+
+For Volt or Brite, use the connection ID as `paymentMethod`. Both accept empty method input. For Brite, an example fragment for a sale in Sweden is shown below. Replace the connection ID with the one issued for your merchant. [Complete sale request](/create-sale)
+
+```json
+{
+  "amount": "125.00",
+  "currency": "SEK",
+  "paymentMethod": "cr_example_brite_bank",
+  "paymentMethodInput": {},
+  "customer": { "country": "SE" }
+}
+```
+
+T365 uses a separate method field **inside** `paymentMethodInput`. For example, a T365 bank-transfer request uses `"method": "BANK_TRANSFER"` together with `email`, `firstName`, `lastName`, `phone` and `country`. Use the buyer details and regional solution approved for that account. The top-level `paymentMethod` still identifies your T365 connection.
+
+## Confirm the result
+
+Keep the order pending while the buyer is at the bank. For Volt, `SUCCESS` means the bank accepted the payment initiation. If reconciliation requires funds received, check the settlement report or provider account separately.
+
+In sandbox, test bank approval, cancellation and closing the browser before the return. Your backend should reconcile each order from a verified webhook or status lookup even if the return never loads. [Webhooks](/webhooks)

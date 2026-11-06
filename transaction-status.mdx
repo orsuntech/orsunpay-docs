@@ -1,0 +1,89 @@
+---
+title: Transaction status
+description: Poll an existing payment without sending another PSP request.
+---
+
+Use your merchant API key to read the current stored transaction state:
+
+```bash
+curl "$ORSUNPAY_API_BASE_URL/v1/transactions/tr_example" \
+  -H "x-api-key: $ORSUNPAY_API_KEY"
+```
+
+```json
+{
+  "status": true,
+  "transaction": {
+    "id": "tr_example",
+    "orderId": "order_example_001",
+    "status": "PROCESSING",
+    "action": "SALE",
+    "amount": "5000.00",
+    "currency": "PLN",
+    "processingAmount": "5000.00",
+    "processingCurrency": "PLN",
+    "errorCode": "PSP_OUTCOME_UNKNOWN",
+    "createdAt": "2026-10-10T10:00:00.000Z"
+  }
+}
+```
+
+HTTP 200 means the lookup succeeded, not that payment succeeded. `PROCESSING`
+means keep the order pending. Fulfill only after `SUCCESS`; handle `DECLINED`,
+`CANCELED` or `EXPIRED` as the reported final state. Poll with backoff (for example,
+5 seconds initially, then increasing to 30 seconds) while waiting for a signed
+webhook. Polling reads OrsunPay's stored state; it does not resend or query the PSP.
+If pending persists, contact operations for reconciliation rather than creating a
+second payment.
+
+Missing and other merchants' transactions both return HTTP 404. The merchant
+scope comes solely from your API key; no merchant ID parameter can override it.
+Amounts remain decimal strings. The response excludes customer data and merchant
+metadata and uses `Cache-Control: no-store`.
+
+A retried creation request with the same Idempotency-Key returns the original
+stored creation response, which may still say pending. Use this endpoint for
+fresh status. Keep the original transaction and order IDs for reconciliation.
+
+## Adyen session attempts
+
+An Adyen hosted session can contain several payment attempts. A refused attempt
+leaves the transaction `PROCESSING` with `errorCode: ADYEN_REFUSED`; it does not
+mean that the order is finally declined. Keep the same transaction/order pending
+while the shopper can retry in the existing session. Do not create a second sale
+or fulfill the order because of the redirect back to your site.
+
+A later verified successful attempt changes the transaction to `SUCCESS` and
+clears `ADYEN_REFUSED`. If the session closes or expires without success, the
+transaction becomes `EXPIRED`. Read the transaction status together with the
+error code; an error code alone is not a final state. Signed webhooks and polling
+use these same states.
+
+The current Adyen integration requires **automatic immediate capture** for card
+payments. Ask your operations contact to verify this before enabling Adyen;
+delayed or manual capture is not supported by the current sale status model.
+
+## Find a payment or list payments
+
+`GET /v1/payment/:id` is an alias of the existing status endpoint. To recover a
+lost creation response, use `GET /v1/payment?orderId=your-order-id`. It returns the
+same `{status:true, transaction:{...}}` response or 404. Do not create another
+sale to learn the status of an existing order.
+
+Without `orderId`, `GET /v1/payment` returns `{status:true, data:[...], has_more,
+next_cursor}`. Results are newest first, ordered by creation timestamp then ID.
+`limit` defaults to 25 and is limited to 1–100. Pass the returned `next_cursor`
+as `starting_after` for the next page; it is the last transaction ID. Timestamps
+retain PostgreSQL microsecond precision for pagination even though JSON dates
+use milliseconds. A missing/deleted/foreign-mode cursor returns 400 INVALID_CURSOR.
+Newer inserts do not shift subsequent pages; this is a live list, not a snapshot.
+
+Optional filters: `status`, `action` (`SALE` or `PAYOUT`), `created_gte`
+(inclusive), `created_lt` (exclusive). Dates must be ISO8601 instants with a
+`Z` or explicit timezone offset. Keep filters unchanged while paging. `orderId`
+is an exact lookup and cannot be combined with any list filter or cursor.
+
+The authenticated key determines merchant and test/live mode. Query parameters
+cannot select another scope. The response uses the same decimal-string money
+formatter as merchant webhooks and excludes private customer, credential,
+metadata and raw PSP payloads. No call to a payment provider is made.

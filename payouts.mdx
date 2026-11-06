@@ -1,0 +1,114 @@
+---
+title: Payouts
+description: Send money to a buyer through a payout-capable provider connection with createPayout.
+---
+
+A payout is a transaction with action `PAYOUT`, created with `POST /v1/payment/payout`
+(`createPayout`). It moves funds from your provider account to the buyer, so it is only available
+on connections whose provider supports payouts for your account.
+
+| Recipient | Supported connection | Source of funds |
+| --- | --- | --- |
+| Bank account | Adyen `bank_transfer` | Your Adyen Balance Platform balance account |
+| Bank account | Checkout.com `bank_transfer` | Your Checkout.com currency account |
+| Card | Colibrix ONE `card`, sandbox only | An earlier successful sale on the same connection |
+
+The bank-transfer connections above are for payouts. To accept a bank-funded sale, choose a bank payment connection instead. B2BinPay crypto withdrawals require a separate sandbox cashier flow. [Bank payment sales](/methods/bank-payments)
+
+## Create a payout
+
+A payout always names its connection in `paymentMethod`; there is no hosted method selection.
+The required fields are `merchantId`, `orderId`, `buyerId`, `amount`, `currency`, `paymentMethod`,
+`successUrl`, `failureUrl`, `returnUrl` and `callbackUrl`. Provide method-specific details in
+`paymentMethodInput`. The following example creates a Colibrix sandbox card payout.
+
+<CodeGroup>
+
+```bash cURL
+curl --request POST "${ORSUNPAY_API_BASE_URL}/v1/payment/payout" \
+  --header "x-api-key: ${ORSUNPAY_API_KEY}" \
+  --header 'Content-Type: application/json' \
+  --header 'Idempotency-Key: 6c1a9e4d-2f7b-4c0e-8d35-1b2a3c4d5e6f' \
+  --data '{
+    "merchantId": "mr_example",
+    "orderId": "payout_example_001",
+    "buyerId": "buyer_example_001",
+    "amount": "25.00",
+    "currency": "EUR",
+    "paymentMethod": "cr_example",
+    "sourceTransactionId": "tr_source",
+    "paymentMethodInput": {},
+    "successUrl": "https://merchant.example/payout/success",
+    "failureUrl": "https://merchant.example/payout/failure",
+    "returnUrl": "https://merchant.example/payout/return",
+    "callbackUrl": "https://merchant.example/webhooks/orsunpay"
+  }'
+```
+
+```ts Node
+const { data } = await client.payments.createPayout(
+  {
+    orderId: "payout_example_001",
+    buyerId: "buyer_example_001",
+    amount: "25.00",
+    currency: "EUR",
+    paymentMethod: "cr_example",
+    sourceTransactionId: "tr_source",
+    paymentMethodInput: {},
+    successUrl: "https://merchant.example/payout/success",
+    failureUrl: "https://merchant.example/payout/failure",
+    returnUrl: "https://merchant.example/payout/return",
+    callbackUrl: "https://merchant.example/webhooks/orsunpay",
+  },
+  { idempotencyKey: "6c1a9e4d-2f7b-4c0e-8d35-1b2a3c4d5e6f" },
+);
+```
+
+</CodeGroup>
+
+The connection must be active, in the key's mode, and accept the currency and amount within its
+payout limits; see [routing](/routing#payouts). Payouts follow the same
+[idempotency rules](/idempotency) as sales and share the `orderId` namespace with them.
+Raw card numbers or CVV in any field are rejected with `400 CARD_DATA_NOT_ACCEPTED`.
+
+Colibrix card payouts are funded by an earlier successful card sale: pass that sale's OrsunPay ID
+in `sourceTransactionId`. It must belong to the same merchant, customer, payment configuration
+and test/live mode as the payout.
+
+## Send to a bank account
+
+Use the `cr_…` ID of a payout-enabled Adyen or Checkout.com bank-transfer connection. For Adyen, configure the Transfers API key, balance account ID and Balance Platform webhook HMAC key. For Checkout.com, configure the processing channel and payout currency account ID. Confirm that the destination country, currency and recipient type are enabled on that account.
+
+Supply the beneficiary details in `paymentMethodInput`. For an individual, send `accountHolderFirstName`, `accountHolderLastName` and `bankCountry` (two-letter country code). For a company, use `accountHolderType: "company"` and `companyName`. Send a checksum-valid IBAN for the bank country in uppercase without spaces, plus the BIC when the corridor requires it. For a local US or UK account, provide `accountNumber` and `bankCode` (routing number or sort code). US payouts can also specify `accountType` as `checking` or `savings`. Use beneficiary details supplied for your provider's test environment when testing.
+
+## Approval and result
+
+There is currently no configurable merchant policy to hold every payout, or payouts above an
+amount threshold, before dispatch. Supported direct payouts are submitted to the provider during
+creation. Do not rely on `WAIT_APPROVE` as a pre-dispatch approval policy.
+
+Users with the payout-approval permission can approve or deny an existing `WAIT_APPROVE` payout
+in the [merchant cabinet](/merchant-cabinet) with fresh MFA; operators can do the same. These
+actions use the connector's approve/deny path. `PROCESSING` is a pending result, not evidence that
+the recipient has been paid.
+
+If an approve/deny command cannot be sent (`PSP_REQUEST_NOT_SENT`) or its request cannot be
+prepared locally (`PSP_INPUT_INVALID`), the existing payout stays `WAIT_APPROVE`; it is not a
+declined or canceled payout. No automatic retry runs. Refresh its status before another explicit
+decision; request-preparation errors require investigation. A provider result received in the
+meantime takes precedence. If restoring the waiting state cannot be confirmed, the action remains
+`PSP_OUTCOME_UNKNOWN` and must be reconciled rather than retried.
+
+An Adyen bank transfer requiring approval stays `PROCESSING`. Complete the approval in the Adyen Customer Area. A booked Adyen transfer can report `SUCCESS` when funds leave your balance account. A subsequent return can change it to `DECLINED` with `ADYEN_PAYOUT_RETURNED`. For Checkout.com, a paid payout becomes `SUCCESS` and a subsequent return becomes `DECLINED` with `CHECKOUT_PAYOUT_RETURNED`. Continue processing webhooks after the initial success.
+
+As with sales, check the response body's `status` and the transaction status. An uncertain provider
+answer leaves the payout `PROCESSING` with `errorCode: PSP_OUTCOME_UNKNOWN`: it is never sent
+again automatically, and you must not create a second payout for the same order. Wait for the
+[`transaction.updated` webhook](/webhook-events) or [poll the status](/transaction-status).
+
+A payout retry proven not to have reached the provider, or a submission through an existing payment
+input form, must still meet the connection's current inclusive payout limits and processing currency.
+If the saved processing amount no longer qualifies, the request returns HTTP 503
+`PSP_REQUEST_NOT_SENT` before dispatch. The transaction stays available for retry with the same order;
+no amount, fee or exchange rate is recalculated. An operator must restore compatible settings before
+that saved payout can proceed. A recorded provider outcome is still replayed rather than resubmitted.

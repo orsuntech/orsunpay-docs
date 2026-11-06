@@ -1,0 +1,28 @@
+---
+title: Payment methods
+description: Find a method for a sale, identify its provider connection and check which options your buyers can use.
+---
+
+A **payment method** is how the buyer pays, such as card, iDEAL or Apple Pay. A **provider** processes the payment through your account with that provider. A **connection** ties a provider account to your merchant, a method and an environment. Two merchants can offer the same method through different providers.
+
+For example, you might have a Revolut card connection and a Mollie iDEAL connection. To offer both, let the buyer choose on the OrsunPay hosted page. To open Revolut specifically, send your Revolut card connection ID with the sale. [Choose a method](/methods/choose-a-method)
+
+## Find a buyer flow
+
+| What the buyer wants to do | Guide |
+| --- | --- |
+| Pay by card or complete a card authentication challenge | [Cards and hosted checkout](/methods/cards) |
+| Pay with Apple Pay, Google Pay or PayPal | [Wallets](/methods/wallets) |
+| Authorize a bank payment or use a bank transfer | [Pay by bank and bank transfers](/methods/bank-payments) |
+| Use iDEAL, BLIK, Przelewy24, a voucher or a pay-later option | [Local payment methods](/methods/local-payments) |
+| Pay a crypto invoice | [Crypto](/methods/crypto) |
+
+## Check availability
+
+In the merchant cabinet, open **Connections** in the same Test or Live mode as your API key. Check that the connection belongs to the merchant on your request, permits sales and covers the currency and amount. If there are country or metadata rules, use the buyer's country and the same metadata you will send on the real order. The provider must also enable the method on your account for that market. [Routing and connection selection](/routing)
+
+Checkout calculates the eligible options for each sale. For example, an Adyen connection requires a buyer email address and country, and a Stripe wallet also needs a supported device. Use checkout to present the available choices if these conditions vary across your buyers.
+
+## After the sale
+
+The merchant refund API supports eligible sales through Stripe, Mollie, Revolut, Viva, Adyen and Checkout.com. Check the original transaction's provider and status before promising a refund. Sending money to a recipient uses a separate payout operation with its own connections and inputs. [Refunds](/refunds) · [Payouts](/payouts)

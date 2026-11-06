@@ -1,0 +1,38 @@
+---
+title: Hosted payment page
+description: Redirect the buyer while keeping payment confirmation on your backend.
+---
+
+When your deployment has hosted checkout enabled, omit `paymentMethod` on a sale to let the buyer
+choose. A selected method with missing input can also open the page with that method preselected.
+If hosted checkout is unavailable, a methodless request returns `PAYMENT_METHOD_REQUIRED`.
+
+After checking `status: true`, use `paymentPageUrl` when present, otherwise use `url` if provided.
+Send that URL unchanged to your frontend and redirect the buyer. Do not build a checkout token,
+append credentials, or call checkout's browser endpoints from your server integration.
+
+The hosted page collects missing payment details and redirects to the provider when needed.
+The buyer eventually returns to your `successUrl`, `failureUrl` or `returnUrl`. **A browser return
+is not proof of payment**: display your server's verified payment state and wait for a signed
+webhook before fulfilling an order.
+
+## What the buyer sees
+
+In this local demo, the buyer checks the merchant and the €1,290.00 order total, selects **Pay by Bank**, and continues to a simulated bank. After approval, hosted checkout shows **Payment complete** with the order reference. The order and payment are synthetic.
+
+<video controls playsInline preload="none" poster="/media/checkout/pay-by-bank.webp" aria-label="Buyer selects Pay by Bank, approves a simulated payment and returns to hosted checkout">
+  <source src="/media/checkout/pay-by-bank.webm" type="video/webm" />
+</video>
+
+## Language
+
+Hosted checkout is available in English, Ukrainian, Polish, Czech and German. Set the sale's `locale` to `en-US`, `en-GB`, `uk-UA`, `pl-PL`, `cs-CZ`, `de-DE`, `de-AT` or `de-CH` for the corresponding language. The API also accepts `ru-RU`. For that value, checkout tries its other language hints and falls back to English.
+
+The buyer can switch languages on the page. Their selection takes precedence, followed by a configured non-English checkout theme language, the sale locale, the branding default and the browser language. A sale without a locale defaults to `en-US`.
+
+## Keep the link private
+
+Treat the full payment URL as a secret link. Keep it out of logs, analytics and public pages.
+Hosted URLs expire with the sale (48 hours by default; deployment settings can differ). For an
+expired sale, reconcile its status before creating a deliberate new attempt with a new order ID
+and idempotency key.

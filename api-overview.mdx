@@ -1,0 +1,27 @@
+---
+title: Merchant API reference
+sidebarTitle: API overview
+description: Find an operation by task, choose the correct credentials and read the versioned request and response schemas.
+---
+
+The **API Reference** tab lists each HTTP operation with its request fields, headers, responses and examples. Download the [OpenAPI 3.1 contract](/openapi.json) to import it into your API client. Set the server to the HTTPS origin assigned to your merchant.
+
+| I want to … | Start with | Guide |
+| --- | --- | --- |
+| Charge a buyer | `POST /v1/payment/sale` | [Create a sale](/create-sale) |
+| Find an order after losing the response | `GET /v1/payment?orderId=…` | [Transaction lookup](/transaction-status) |
+| Share a reusable checkout | `POST /v1/payment-links` | [Payment links](/payment-links) |
+| Return money on a successful sale | `POST /v1/payment/{id}/refunds` | [Refunds](/refunds) |
+| Pay out through an eligible connection | `POST /v1/payment/payout` | [Payouts](/payouts) |
+| Bill a customer for measured usage | `POST /v1/usage-billing/events` | [Usage billing](/usage-billing) |
+| Open an embedded cashier | `POST /v1/cashier/sessions` | [Cashier sessions](/cashier) |
+
+## Which credential goes where?
+
+Use your **merchant API key** in the `x-api-key` header on your server. For the embedded cashier, your server issues a short-lived access grant bound to the cashier instance. Player operations use that grant. Check the operation's security section before choosing a header.
+
+Your webhook endpoint receives incoming events and verifies them using its **webhook signing secret**. The event catalogue includes events beyond the HTTP receiver examples in OpenAPI. [See webhook events](/webhook-events).
+
+## Read the result
+
+A successful create request can still return a business rejection or a transaction that is waiting for the provider. Inspect the body, save the transaction ID and keep the original idempotency key with your order. Amounts are decimal strings in major units, for example `"12.30"` for EUR. [Errors and retries](/errors) · [Idempotency and amounts](/idempotency)

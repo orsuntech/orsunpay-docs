@@ -1,0 +1,54 @@
+---
+title: Security and card data
+sidebarTitle: Security and PCI
+description: How card data stays out of your systems and OrsunPay's API, and how to protect your credentials.
+---
+
+## Card data never reaches your server
+
+OrsunPay's design keeps card numbers (PAN) and security codes (CVV) away from both your systems
+and OrsunPay's servers:
+
+- Card and wallet details are entered on the **provider's hosted page or the provider's hosted
+  fields**, served from a separate origin from your site. Card numbers never touch OrsunPay servers.
+- The merchant API **rejects raw card data**. A request containing a card number, CVV, track data
+  or similar fields anywhere in its JSON fails with `400 CARD_DATA_NOT_ACCEPTED` before it is
+  stored or logged. Do not try to send card details server-to-server.
+- API responses and webhooks do not contain PAN or CVV. Keep only the identifiers you receive,
+  such as transaction, refund and order IDs.
+
+Your own page should only redirect to, or open, the URLs returned by the API (`paymentPageUrl`,
+payment link `url`). The [`orsunpay-js` widget](/js-widget) only opens those URLs; it collects no
+card data. The hosted payment page cannot be framed (`frame-ancestors 'none'`).
+
+Your PCI DSS obligations depend on your integration and your acquirer. Confirm your validation
+scope with your acquirer or assessor.
+
+## Protect credentials
+
+| Secret                 | Used for                       | Rules                                                              |
+| ---------------------- | ------------------------------ | ------------------------------------------------------------------ |
+| API key (`test_`, `live_`) | Authenticating API requests | Server-side only; never in browsers, apps, URLs or logs. [Rotate](/authentication#rotation) on any suspicion |
+| Webhook signing secret (`whsec_`) | Verifying webhooks  | Separate per mode; shown once; rotation is immediate               |
+| Provider credentials   | Your PSP account               | Entered in the cabinet, encrypted at rest, never shown again in full |
+
+Payment URLs (`paymentPageUrl`, link URLs) are bearer links: keep them out of analytics, logs and
+public pages.
+
+## Webhook and callback safety
+
+Webhooks are signed with HMAC-SHA256 using your merchant's own secret; there is no shared platform
+secret and no unsigned delivery. Callback URLs must be public HTTPS URLs; private, local and
+reserved network addresses, URL credentials and redirects are rejected. See [webhooks](/webhooks).
+
+## Cabinet access
+
+The merchant cabinet uses per-user accounts, role permissions and MFA step-up for sensitive actions
+such as key rotation, webhook secret rotation and payout approval. Sessions expire after inactivity.
+
+## Reporting a vulnerability
+
+Report suspected vulnerabilities privately to OrsunPay through your established private contact
+channel. Do not open public issues, and do not include API keys, webhook secrets, card data or
+personal information in a report. Do not test against live merchants or payments without
+authorization.

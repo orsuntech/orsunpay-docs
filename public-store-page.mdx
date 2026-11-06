@@ -1,0 +1,27 @@
+---
+title: Public store page
+description: Share a small store page with selected reusable payment links.
+---
+
+An operator can publish a store page at `{CHECKOUT_BASE_URL}/m/<handle>`.
+It shows your store name, a short plain-text description and selected reusable
+payment links. Each button opens the existing hosted [payment link](/payment-links)
+flow. The page does not support buyer-entered amounts.
+
+Only live-mode links explicitly selected for this page appear. An unpublished
+page or deactivated store/company returns 404. Pages are excluded from search
+indexing by default; indexing is a separate operator setting. Branding and
+self-service editing in the merchant cabinet are follow-up features.
+
+Give the operator a lowercase handle of 3–40 letters, digits or hyphens, a title
+(up to 255 characters), description (up to 1000 characters), and the payment
+links to display in order. Reserved system names cannot be handles. Review the
+content before enabling publication: everything shown on this page is public.
+Do not place personal data, credentials or private order details in the title,
+description or selected payment-link descriptions.
+
+The page supports English, Ukrainian, Polish, Czech and German. Clicking a link
+rechecks its availability in checkout. Independently deactivated or exhausted
+links may remain visible for up to 15 seconds; they cannot start an unavailable
+payment. Confirm orders from your backend's verified [webhooks](/webhooks), never
+from a buyer returning to your page.

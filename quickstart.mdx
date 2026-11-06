@@ -1,0 +1,150 @@
+---
+title: "Quickstart: your first payment"
+sidebarTitle: Quickstart
+description: Use a test API key to create a sale, send the buyer to the payment page and confirm the result with a signed webhook.
+---
+
+This walkthrough uses a **test** key, so it only reaches sandbox provider connections. It assumes
+onboarding is complete and at least one sandbox connection is enabled for your merchant.
+
+## 1. Prepare credentials
+
+In the [merchant cabinet](/merchant-cabinet), switch to **Test** mode and:
+
+1. On **API keys**, create or rotate the test key. The full `test_…` key is shown once; store it in
+   your server's secret store.
+2. On **Webhooks**, set the test endpoint URL and issue the test signing secret (`whsec_…`). Test
+   events go only to this test endpoint, signed with this test secret: the `callbackUrl` of an
+   individual test sale cannot redirect them, and without a test endpoint no test webhook is sent.
+
+Load `ORSUNPAY_API_KEY` and `ORSUNPAY_MERCHANT_ID` from your server's configuration. Set `ORSUNPAY_API_BASE_URL` to your assigned origin, for example `https://r1-api.orsunpay.com` for R1. Use public HTTPS URLs belonging to your store in place of `merchant.example`. The request below shows the wire format; replace `mr_example` with the ID belonging to your key and supply your own order ID and saved idempotency key.
+
+## 2. Create a sale
+
+Generate an idempotency key once for this payment attempt and store it with the order before
+sending. Reuse the same key and body if you need to retry.
+
+<CodeGroup>
+
+```bash cURL
+curl --request POST "${ORSUNPAY_API_BASE_URL}/v1/payment/sale" \
+  --header "x-api-key: ${ORSUNPAY_API_KEY}" \
+  --header 'Content-Type: application/json' \
+  --header 'Idempotency-Key: 0b6f2c1e-4c7a-4a43-9a51-6a4b1d7e9f10' \
+  --data '{
+    "merchantId": "mr_example",
+    "orderId": "order_example_001",
+    "buyerId": "buyer_example_001",
+    "amount": "12.30",
+    "currency": "EUR",
+    "successUrl": "https://merchant.example/payment/success",
+    "failureUrl": "https://merchant.example/payment/failure",
+    "returnUrl": "https://merchant.example/payment/return",
+    "callbackUrl": "https://merchant.example/webhooks/orsunpay"
+  }'
+```
+
+```ts Node
+import { OrsunPay } from "@orsunpay/node";
+
+const client = new OrsunPay({
+  apiKey: process.env.ORSUNPAY_API_KEY!,
+  merchantId: process.env.ORSUNPAY_MERCHANT_ID!,
+  baseUrl: process.env.ORSUNPAY_API_BASE_URL!,
+});
+
+const { data } = await client.payments.createSale(
+  {
+    orderId: "order_example_001",
+    buyerId: "buyer_example_001",
+    amount: "12.30",
+    currency: "EUR",
+    successUrl: "https://merchant.example/payment/success",
+    failureUrl: "https://merchant.example/payment/failure",
+    returnUrl: "https://merchant.example/payment/return",
+    callbackUrl: "https://merchant.example/webhooks/orsunpay",
+  },
+  { idempotencyKey: "0b6f2c1e-4c7a-4a43-9a51-6a4b1d7e9f10" },
+);
+const redirectUrl = data.paymentPageUrl ?? data.url;
+```
+
+</CodeGroup>
+
+The Node SDK is built from this repository and is not yet published to npm; see
+[Node SDK](/sdks/node). Source clients are also available for [PHP](/sdks/php) and [Python](/sdks/python). The cURL example works independently of the SDKs.
+
+The request omits `paymentMethod`, so the buyer chooses a method on the hosted payment page when
+hosted checkout is enabled for your deployment. Check the response body, not only the HTTP status:
+
+- `status: true` with `paymentPageUrl` (or a provider `url`) means the sale was created; redirect the buyer.
+- `status: false` with an `error` is a business rejection, even with HTTP 201. See [errors](/errors).
+- `pending: true` and `transaction.errorCode: "PSP_OUTCOME_UNKNOWN"` means the outcome is not yet
+  known: keep the order pending and do not create another sale.
+
+## 3. Redirect the buyer
+
+Send `paymentPageUrl` (or `url`) unchanged to your frontend and redirect the buyer. The buyer
+eventually returns to your `successUrl`, `failureUrl` or `returnUrl`. **A browser return is not
+proof of payment.** See [hosted payment page](/hosted-payment-page).
+
+## 4. Verify the webhook
+
+OrsunPay POSTs a `transaction.updated` event to your test endpoint. Verify the
+`OrsunPay-Signature` header against the **exact raw body bytes** before parsing JSON.
+
+<CodeGroup>
+
+```ts Node
+import { verifyWebhook } from "@orsunpay/node";
+
+// rawBody: the unmodified request body as a Buffer, captured before any JSON parser.
+const event = verifyWebhook({
+  rawBody,
+  signatureHeader,
+  secrets: [process.env.ORSUNPAY_WEBHOOK_SECRET!],
+});
+```
+
+```php PHP
+<?php
+// Webhook helper from sdks/php/src (namespace OrsunPay); requires 64-bit PHP 8.1+.
+$event = \OrsunPay\Webhook::constructEvent(
+    file_get_contents('php://input'),
+    $_SERVER['HTTP_ORSUNPAY_SIGNATURE'] ?? null,
+    [getenv('ORSUNPAY_WEBHOOK_SECRET')]
+);
+$eventId = $event->id();
+```
+
+```python Python
+# Inside your receiver, before parsing JSON.
+import os
+from verify_webhook import verify_webhook
+
+verified = verify_webhook(raw_body, signature_header, [os.environ["ORSUNPAY_WEBHOOK_SECRET"]])
+# If verified is False, reject the request with HTTP 400 and stop.
+```
+
+</CodeGroup>
+
+After verification, store the event `id` and apply the change in one database transaction, then
+return 2xx. Fulfil the order only for `data.transaction.status: "SUCCESS"`. Full rules, including
+retries and the downloadable examples, are in [webhooks](/webhooks).
+
+## 5. Read the status if needed
+
+If the webhook has not arrived, read the stored state; this does not contact the provider:
+
+```bash
+curl "${ORSUNPAY_API_BASE_URL}/v1/transactions/<transaction id>" \
+  --header "x-api-key: ${ORSUNPAY_API_KEY}"
+```
+
+See [transaction status](/transaction-status).
+
+## Next steps
+
+- [Test in sandbox](/testing) before switching to your `live_…` key.
+- Learn the [payment states](/payments) and [error handling](/errors).
+- Add [refunds](/refunds) and [payouts](/payouts).

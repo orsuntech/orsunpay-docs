@@ -1,0 +1,45 @@
+---
+title: Environments and base URL
+sidebarTitle: Environments and base URL
+description: Test and live modes share one API; your API key selects the mode and your account determines the base URL.
+---
+
+## One API, two modes
+
+OrsunPay has no separate sandbox host to guess. The **API key** decides the mode:
+
+| Key prefix | Mode | Reaches                              | `livemode` in responses and webhooks |
+| ---------- | ---- | ------------------------------------ | ------------------------------------ |
+| `test_`    | Test | Only your sandbox provider connections | `false`                            |
+| `live_`    | Live | Only your live provider connections  | `true`                               |
+
+Do not send a mode in request bodies; it is always taken from the authenticated key. Whether a
+connection is sandbox or live is derived from its provider credentials (for example a Stripe
+`sk_test_` key or an Adyen test endpoint), not from a free-text setting. A test key with no
+matching sandbox connection receives `NO_CREDENTIALS_FOR_MODE`.
+
+Data is separated by mode: order IDs are unique per merchant **and** mode, transaction and
+payment-link reads only return objects of the key's mode, and webhook endpoints and signing secrets
+are configured separately for test and live. Idempotency keys are scoped to the merchant across
+both modes, so use different keys for test and live requests.
+
+## Base URLs
+
+For R1 merchants the API origin is `https://r1-api.orsunpay.com` (append `/v1/…` for a request). Sign in to the [R1 merchant cabinet](https://r1-cabinet.orsunpay.com). If your onboarding instructions specify another region or origin, use the value supplied for your merchant. Examples use these placeholders:
+
+| Placeholder           | What it is                                         | Where you get it                    |
+| --------------------- | -------------------------------------------------- | ----------------------------------- |
+| `{API_BASE_URL}`      | Merchant API (`/v1/...` paths)                     | Assigned to your account at onboarding |
+| `{CHECKOUT_BASE_URL}` | Hosted payment page and payment links (`/pay/`, `/l/`, `/m/`) | Returned in API responses (`paymentPageUrl`, link `url`) |
+| `{DASHBOARD_URL}`     | Merchant cabinet                                   | Sent with your cabinet invitation   |
+
+The OpenAPI document deliberately has no `servers` entry and the [Node SDK](/sdks/node) has no
+default host: configure the API base URL assigned to you. Use the checkout URLs exactly as
+returned by the API; do not build them yourself.
+
+## Moving from test to live
+
+1. Complete your tests with a `test_` key and sandbox connections ([testing](/testing)).
+2. Create the live connections and the live webhook endpoint and signing secret in the cabinet.
+3. Switch the server's API key to `live_…` and the webhook secret to the live secret.
+4. Keep processing test and live events separately using the signed `livemode` field.

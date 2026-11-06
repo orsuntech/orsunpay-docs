@@ -1,0 +1,25 @@
+---
+title: Wallets
+description: Offer Apple Pay or Google Pay on checkout, and identify the providers that host other wallet flows.
+---
+
+For buyer-selected wallets, create a sale without a method and open its `paymentPageUrl`. Checkout can offer Apple Pay and Google Pay when your wallet connections are eligible. A provider may also offer a wallet inside its hosted card checkout based on your account settings.
+
+## Apple Pay and Google Pay with Stripe
+
+1. Enable the wallets on your Stripe account. If you connect with your own keys, enter the Stripe publishable key in the same mode as your secret or restricted key.
+2. Check that the payment-method domain used for the wallet page is enabled on the Stripe account receiving the charge. Include `payment_intent.succeeded` and `payment_intent.payment_failed` in that account's webhook destination for OrsunPay.
+3. Open the sale's hosted page on a device with an eligible wallet. Choosing the wallet opens a dedicated OrsunPay wallet page that loads Stripe Express Checkout. The buyer confirms in the wallet sheet.
+4. Update the order from the signed OrsunPay webhook or a status read. If the buyer closes the wallet, check the transaction before offering a new sale. [Transaction status](/transaction-status)
+
+If the option appears in checkout but Stripe shows no usable button, check the account, domain status, device, browser and wallet setup. Test with both a provisioned device and a browser without a usable wallet. Buyers should have another eligible option when you intend to accept alternatives.
+
+## Other wallet connections
+
+| Connection | What the buyer sees |
+| --- | --- |
+| Comgate or Ari10 Apple Pay / Google Pay | A provider redirect for the selected wallet. |
+| Checkout.com card | The provider's hosted card page can also present wallets enabled on that account. Select its card connection when you want this flow. |
+| Colibrix ONE | Apple Pay and Google Pay use hosted sessions. PayPal uses a separate local-method connection. These flows are sandbox-only. |
+
+Keep provider keys on your backend or in the provider connection. The merchant API only needs the sale details and any permitted buyer fields. [Choose a payment method](/methods/choose-a-method)

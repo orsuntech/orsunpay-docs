@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 220" role="img" aria-labelledby="title desc">
+  <title id="title">How a hosted payment reaches your order</title>
+  <desc id="desc">Your server creates a sale. OrsunPay opens checkout with an eligible provider. A signed webhook carries the result back to your server.</desc>
+  <defs>
+    <pattern id="grid" width="18" height="18" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" fill="#595a4d"/></pattern>
+    <marker id="arrow" markerWidth="5" markerHeight="5" refX="4" refY="2.5" orient="auto"><path d="M0 0L5 2.5 0 5" fill="none" stroke="#faca19"/></marker>
+  </defs>
+  <rect width="800" height="220" rx="18" fill="#22251f"/><rect x="1" y="1" width="798" height="218" rx="18" fill="url(#grid)" opacity=".55"/>
+  <g fill="none" stroke="#faca19" stroke-width="2.2" marker-end="url(#arrow)">
+    <path d="M200 76H319"/><path d="M469 76H592"/><path d="M396 107v39q0 14-14 14H146q-14 0-14-14v-38" stroke-dasharray="5 5"/>
+  </g>
+  <g fill="#33382d" stroke="#626753"><rect x="55" y="47" width="145" height="55" rx="13"/><rect x="596" y="47" width="148" height="55" rx="13"/></g>
+  <rect x="323" y="44" width="146" height="61" rx="15" fill="#ffcc00"/>
+  <g font-family="Arial,Helvetica,sans-serif" text-anchor="middle"><g fill="#f9f8ef" font-weight="bold" font-size="20"><text x="127" y="82">Your server</text><text x="670" y="82">Checkout</text></g>
+    <text x="396" y="82" font-weight="bold" font-size="22" fill="#20231b">OrsunPay</text>
+    <g fill="#dddfd2" font-size="14"><text x="260" y="61">Create sale</text><text x="534" y="61">Redirect buyer</text></g>
+    <rect x="181" y="144" width="164" height="30" rx="15" fill="#22251f" stroke="#626753"/><text x="263" y="164" fill="#ffdb51" font-family="monospace" font-size="15">Signed webhook</text>
+  </g>
+</svg>

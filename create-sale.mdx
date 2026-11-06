@@ -1,0 +1,63 @@
+---
+title: Create a sale
+description: Start a buyer payment with decimal-string money and a stable idempotency key.
+---
+
+Call `POST /v1/payment/sale` from your backend. This example omits `paymentMethod`, so the buyer
+chooses a method on the hosted payment page when that feature is enabled for your deployment.
+Keep the example's idempotency key stable across retries; use a fresh key for each intentional new attempt.
+
+```bash
+curl --request POST "${ORSUNPAY_API_BASE_URL}/v1/payment/sale" \
+  --header "x-api-key: ${ORSUNPAY_API_KEY}" \
+  --header 'Content-Type: application/json' \
+  --header 'Idempotency-Key: 0b6f2c1e-4c7a-4a43-9a51-6a4b1d7e9f10' \
+  --data '{
+    "merchantId": "mr_example",
+    "orderId": "order_example_001",
+    "buyerId": "buyer_example_001",
+    "amount": "12.30",
+    "currency": "EUR",
+    "description": "Coffee beans",
+    "successUrl": "https://merchant.example/payment/success",
+    "failureUrl": "https://merchant.example/payment/failure",
+    "returnUrl": "https://merchant.example/payment/return",
+    "callbackUrl": "https://merchant.example/webhooks/orsunpay"
+  }'
+```
+
+Add the optional `locale` (BCP 47: `en-US`, `en-GB`, `uk-UA`, `ru-RU`, `pl-PL`, `cs-CZ`, `de-DE`,
+`de-AT` or `de-CH`) to choose the language of
+the hosted payment page; see [hosted payment page languages](/hosted-payment-page#language) for how
+the page picks its language and which languages it has.
+
+The merchant ID and URLs above are placeholders. Use a reachable public HTTPS callback endpoint
+that verifies [webhook signatures](/webhooks). The callback endpoint must not redirect.
+
+When choosing a method on your server, set `paymentMethod` to the **credential configuration ID**
+provided for your merchant, and supply that method's `paymentMethodInput` fields. Do not send raw
+card details through this example. Missing method details can also lead to the hosted page.
+
+A successful response can include `paymentPageUrl` for the hosted page or `url` for a provider
+redirect, plus `transaction`. Check the body's boolean `status` as well as the HTTP status:
+HTTP 201 can carry `status: false` and a business `error`. Creation success does not mean the
+payment has been paid. See [errors](/errors) and [hosted redirects](/hosted-payment-page).
+
+For the full request and response schemas, open **API Reference → Payments → Create deposit transaction (Sale)**.
+The Node SDK equivalent is `client.payments.createSale(params, { idempotencyKey })`; see [Node SDK](/sdks/node).
+
+## Metadata and connection selection
+
+Include a `metadata` object (at most 16 KiB of JSON, 50 entries per object, nesting depth 5) when
+your integration needs connection-selection hints. Operators can attach metadata rules to your
+connections; see [routing and connection selection](/routing). Metadata values are your own
+assertions and are set only by your backend.
+
+## Uncertain outcome
+
+If the PSP outcome is uncertain, the API returns HTTP 201 with `status: true`,
+`pending: true`, and the existing transaction's `id`, `status: PROCESSING`, and
+`errorCode: PSP_OUTCOME_UNKNOWN`. There is **no redirect URL**. Keep that order
+pending and [poll its status](/transaction-status); do not create a new order or
+ask the buyer to submit another payment. This accepted response is stored for
+replays with the same Idempotency-Key.

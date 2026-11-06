@@ -1,0 +1,27 @@
+---
+title: Changelog
+description: Merchant-visible changes to the OrsunPay API contract and SDKs.
+---
+
+The merchant API is versioned by path (`/v1`). Platform releases are tagged in the OrsunPay
+repository; the entries below list only releases with changes visible to merchant integrations.
+The current contract is always the OpenAPI document behind the **API Reference** tab.
+
+<Update label="2026-10-23" description="v0.5.16">
+- Merchant server-to-server requests that contain raw card data (card number, CVV and similar
+  fields) are rejected with `400 CARD_DATA_NOT_ACCEPTED`. See [security](/security).
+</Update>
+
+<Update label="2026-10-21" description="v0.5.0">
+- Added cashier session routes for merchant backends (`POST /v1/cashier/sessions`,
+  `/v1/cashier/sessions/{id}/access-grants`, `/v1/cashier/sessions/{id}/revoke`,
+  `/v1/cashier/wallet/receipts`) and the player-facing cashier routes under `/v1/cashier-ui/`.
+- Node SDK source: `cashier.createSession`, `cashier.mintGrant`, `cashier.revokeSession`,
+  `cashier.acknowledgeWalletReceipt`.
+</Update>
+
+<Update label="Node SDK 0.1.0" description="Unreleased">
+- First version of `@orsunpay/node`: sales, payouts, transaction retrieval, payment links,
+  webhook verification, idempotent retries and typed errors. Not yet published to npm.
+  See [Node SDK](/sdks/node).
+</Update>

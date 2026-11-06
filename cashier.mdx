@@ -1,0 +1,20 @@
+---
+title: Embed the cashier
+description: Open a cashier for an authenticated player and keep merchant credentials on your server.
+---
+
+Use the cashier when a signed-in player needs to choose a deposit or withdrawal method in your application. For a single purchase, start with a [hosted sale](/create-sale).
+
+<Steps>
+  <Step title="Create the session on your backend">
+    Authenticate the player, then call `POST /v1/cashier/sessions` with your merchant key. Bind the embedded session to the parent origin where the player will open it. Use the session and origin returned or assigned for that integration.
+  </Step>
+  <Step title="Mount the frame on the allowed origin">
+    Configure the OrsunPay browser SDK with `createCashier`, the cashier origin and a `getSessionToken` callback. Your backend calls `POST /v1/cashier/sessions/{id}/access-grants` for the current instance. Hand the grant to the SDK in memory. Keep it out of URLs, analytics and browser storage.
+  </Step>
+  <Step title="Track the operation and wallet receipt">
+    The frame reads eligible methods and quotes for this session. If your integration handles wallet effects, verify the signed `cashier.wallet.effect_requested` event, apply the effect once and acknowledge it through `POST /v1/cashier/wallet/receipts`. A buyer closing the frame does not confirm a wallet credit.
+  </Step>
+</Steps>
+
+Call `POST /v1/cashier/sessions/{id}/revoke` from your server to close a session. See the **API Reference** tab for required fields and [webhook events](/webhook-events) for the wallet event contract.

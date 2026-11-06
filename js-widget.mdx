@@ -1,0 +1,152 @@
+---
+title: JavaScript widget and card fields
+sidebarTitle: JS widget and card fields
+description: Open an OrsunPay payment link or hosted payment page from your own site without handling card data.
+---
+
+The standalone `orsunpay-js` widget renders a button or opens an existing checkout
+URL from your own button. It collects no card data and makes no API requests.
+Create a [payment link](/payment-links) or [sale](/create-sale) on your server;
+never give the widget an API key. The widget accepts the link's `url` or the
+sale's `paymentPageUrl`, not a provider redirect URL from `url` on a sale.
+
+## Load an immutable version
+
+Hosting and publication are separate from this package. The paths below assume
+you host the built files under `/vendor/orsunpay/` on your own site. Copy the
+exact `sha384-…` value for the file from that build's `manifest.json`; the
+placeholder below deliberately cannot pass integrity validation. Do not replace
+bytes at a versioned URL: bump the package version for every change, including a
+change to the checkout-origin allowlist.
+
+```html
+<script
+  defer
+  src="/vendor/orsunpay/orsunpay.0.1.1.umd.min.js"
+  integrity="sha384-REPLACE_WITH_MANIFEST_VALUE"
+  crossorigin="anonymous"
+></script>
+<script defer src="/assets/payment-button.js"></script>
+<div id="pay-button"></div>
+```
+
+In your external `/assets/payment-button.js` file:
+
+```js
+const button = OrsunPay.button("#pay-button", {
+  // Synthetic slug: replace with a link created by your backend.
+  paymentLinkUrl: "{CHECKOUT_BASE_URL}/l/AAAAAAAAAAAAAAAAAAAAAAAA",
+  mode: "popup",
+  label: "Pay (opens a new window)",
+  locale: "en",
+  theme: "dark",
+  onClose() {
+    // Closing the window is NOT a payment result.
+    document.querySelector("#order-message").textContent =
+      "Check your order status with the store.";
+  },
+});
+
+// When your page/component unmounts:
+// button.destroy();
+```
+
+Include your own status element if using that callback. For a strict
+`script-src 'self'` policy, keep the library and initialization script on the
+same origin. Cross-origin script hosting also needs your CSP allowlist and a
+CORS response that permits the requesting site for SRI verification.
+See [Subresource Integrity](https://developer.mozilla.org/en-US/docs/Web/Security/Defenses/Subresource_Integrity).
+
+ESM is also available from an external module (loaded with `<script type="module"
+src="/assets/payment-button.mjs">`):
+
+```js
+import { button } from "/vendor/orsunpay/orsunpay.0.1.1.esm.js";
+
+// Supplied by your server's sale response through your app's existing data flow.
+const paymentPageUrl =
+  document.querySelector("#pay-button").dataset.checkoutUrl;
+const handle = button("#pay-button", { checkoutUrl: paymentPageUrl });
+```
+
+An ordinary ESM `import` has no `integrity` attribute. Keep it on your trusted
+origin and verify its manifest hash during deployment, or use the UMD script
+with browser-enforced SRI. A checkout URL is a bearer link: do not put it in
+analytics, logs or public examples.
+
+## API
+
+`OrsunPay.button(target, options)` appends a `button type="button"` to a container
+selected by CSS or supplied as an element. It returns `{ destroy() }`, which
+removes that button, its listeners and its popup polling timer. Existing
+container children are preserved. Use a non-interactive container such as `div`.
+
+`OrsunPay.open(options)` opens the URL immediately and returns a cleanup handle.
+Call it directly from a user click when using popup mode:
+
+```js
+let opened;
+document.querySelector("#my-payment-button").addEventListener("click", () => {
+  opened?.destroy();
+  opened = OrsunPay.open({ checkoutUrl: paymentPageUrl, mode: "popup" });
+});
+```
+
+| Option           | Meaning                                                                               |
+| ---------------- | ------------------------------------------------------------------------------------- |
+| `paymentLinkUrl` | Existing `/l/` payment link. Exactly one URL option is required.                      |
+| `checkoutUrl`    | Existing `/pay/` hosted URL returned by your server's sale.                           |
+| `mode`           | `redirect` (default) or `popup`.                                                      |
+| `label`          | Plain-text button label; default is localized.                                        |
+| `locale`         | `en` (default) or `uk`; controls the widget's label only.                             |
+| `theme`          | `dark` (default) or `light`.                                                          |
+| `onClose`        | Called once when a tracked popup becomes closed/disconnected. Never a payment result. |
+
+The origin allowlist is fixed **at build time** with
+`ORSUNPAY_CHECKOUT_ORIGINS` (comma-separated HTTPS origins); the default build allows only
+OrsunPay's hosted checkout origin (`{CHECKOUT_BASE_URL}`). It cannot be widened through browser options.
+Only `/l/` plus a 24-character alphanumeric slug, or `/pay/` plus the HPP token
+shape, is accepted. Checkout URLs may retain one `?lang=en|uk|pl|cs|de` parameter
+from the server. Userinfo, fragments, encoded path tricks, other queries and
+other paths are rejected. This is structural URL validation; checkout verifies
+the actual token and link on the server.
+
+Invalid input throws `OrsunPayError` with a safe `code`: `INVALID_URL`,
+`INVALID_OPTIONS` or `TARGET_NOT_FOUND`. Errors do not include the supplied URL.
+
+## Popup and browser behavior
+
+Popup mode requests a 480 × 760 window named `orsunpay_checkout`. The browser
+may choose a tab or block it; a blocked popup falls back to a full-page redirect.
+The widget removes the opener reference and polls closure every 500 ms.
+Cleanup does not close the buyer's payment window or cancel a payment.
+
+Some browser isolation policies sever the window reference before the buyer
+closes it. Consequently `onClose` means only that the handle is no longer
+connected. Calling `open` after an asynchronous operation can lose the user
+activation needed for popups; have the checkout URL ready before the click.
+See [Window.open](https://developer.mozilla.org/en-US/docs/Web/API/Window/open).
+
+There is no iframe mode because the hosted page sends `frame-ancestors 'none'`.
+There is no payment-result messaging between windows. A browser return,
+popup closure or success URL is not proof of payment: your backend's verified
+[webhook](/webhooks) and transaction status determine fulfillment.
+
+## CSP and accessibility
+
+Initialization lives in your external JavaScript file; no inline handlers,
+style elements, external fonts or dynamic code evaluation are required.
+Styles are assigned through individual CSSOM properties rather than HTML
+style attributes or `cssText`. Browser documentation distinguishes these
+property assignments from blocked inline style text:
+[style-src-attr](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Security-Policy/style-src-attr).
+The button uses plain text, an accessible label, a visible focus indicator and
+contrasting light/dark colors. Give popup buttons a label warning buyers that a
+new window will open. Check the resulting page under your own CSP and custom CSS.
+
+## Card fields
+
+There is no merchant-embeddable card-field component. Card numbers and security codes are entered
+only on the hosted payment page or on the provider's own hosted page or fields, served from an
+origin separate from your site; your pages and servers never receive them. Use this widget, a
+redirect or a payment link to reach those pages. See [security](/security).

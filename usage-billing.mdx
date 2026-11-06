@@ -1,0 +1,91 @@
+---
+title: Usage billing
+description: Sell subscriptions with included credits and metered overage to your customers.
+---
+
+Usage billing belongs to your business: define a subscription price, monthly credit allowance and overage price for your customers. It is separate from OrsunPay's own service fees.
+
+Use the merchant API key for the store and mode in which you want to create the plan, subscription or usage event.
+
+## Pricing and subscriptions
+
+Create an immutable plan through `POST /v1/usage-billing/plans`:
+
+```json
+{
+  "code": "api-starter-v1",
+  "name": "API Starter",
+  "unit": "request",
+  "currency": "EUR",
+  "monthlyPrice": "29.00",
+  "includedCredits": "10000",
+  "overageUnitPrice": "0.005"
+}
+```
+
+These are illustrative prices, not OrsunPay tariffs. Money and credits are **strings**, never JSON numbers. Monthly prices and caps use currency precision; credits and overage prices allow up to six fractional digits. One credit can represent one request, generation, minute, or another unit defined by your application. To change pricing, create a new plan code. Existing subscriptions retain their original terms.
+
+Create a subscription using `POST /v1/usage-billing/subscriptions` and a unique `Idempotency-Key`:
+
+```json
+{
+  "planId": "0199df00-0000-7000-8000-000000000001",
+  "customerRef": "customer_1042",
+  "overageLimit": "20.00"
+}
+```
+
+Use an opaque customer reference, not an email or other personal information. The response wraps the subscription in `data`, including its `id`, state and invoices. A paid plan starts as `pending_payment`. Share the initial invoice's `paymentUrl` with your customer. It is a hosted payment link to a single payment attempt, using your connected providers. **No automatic card debit is performed.** A zero-price plan starts immediately.
+
+## Record usage
+
+From your trusted backend, send `POST /v1/usage-billing/events` with a unique `Idempotency-Key`:
+
+```json
+{
+  "subscriptionId": "0199df00-0000-7000-8000-000000000002",
+  "eventId": "generation_job_1042",
+  "credits": "1.25"
+}
+```
+
+The API key determines the shop and mode. Never expose it in a browser. Do not include `merchantId`, `companyId` or `livemode` in public API payloads.
+
+An identical event is accepted once; retries return the existing event. Reusing its ID or request key for different content returns a conflict. This remains true after the period ends. Usage is assigned by server receipt time, not a client timestamp. Only call this API for billable work under your customer agreement. There is no reserve/commit flow for asynchronous jobs in this version.
+
+Included credits are consumed first. The full overage amount is compared against the subscription's cap before invoice rounding. An event exceeding the cap is rejected entirely with `USAGE_OVERAGE_LIMIT_EXCEEDED`. A cap of `"0.00"` disables overage. Applications must honor rejected usage; recording an event cannot itself stop your upstream AI job.
+
+## Periods and payment
+
+`GET /v1/usage-billing/subscriptions/{id}` returns usage, remaining credits, recent events and invoices. `POST /v1/usage-billing/subscriptions/{id}/sync` checks persisted payment evidence and reconciles the period; a background worker also does this in bounded batches every minute. A browser redirect is never payment evidence.
+
+Periods follow UTC monthly anniversaries, clamping to the last day of a shorter month without accumulating date drift. Credits do not roll over. At period end, a renewal invoice combines the next base price and the completed period's overage. Usage pauses while it is unpaid. A payment within the next scheduled month preserves the calendar anniversary. If that whole month is missed, payment starts a fresh full month; skipped months are not charged.
+
+`POST /v1/usage-billing/subscriptions/{id}/cancel` cancels at the end of the paid period. Final overage remains payable, without a further base fee. An initial invoice can be voided immediately only if no payment attempt has started. An in-progress payment is reconciled before cancellation is completed; cancellation does not fabricate a refund.
+
+## Operational boundaries
+
+These are usage statements and payment requests, not a tax-invoice or VAT engine. This version has no automatic saved-card charging, prorating, rollover, usage adjustments, reservation API or automated refund-to-credit reversal. Handle customer refunds through the existing refund workflow and review service access separately.
+
+A failed, expired or unknown payment attempt is not automatically replaced with another charge. Contact support to reconcile it; do not create another subscription to retry an uncertain payment. The invoice stays open and access remains paused until valid payment evidence exists. Lists return the latest 100 records; export/pagination and delivery notifications are separate extensions.
+
+Common errors include `USAGE_EVENT_CONFLICT`, `USAGE_IDEMPOTENCY_CONFLICT`, `USAGE_OVERAGE_LIMIT_EXCEEDED`, `USAGE_SUBSCRIPTION_INACTIVE`, `USAGE_PERIOD_ENDED` and `USAGE_BUSY`. Retry transient contention with the same identifiers; do not retry a cap or state rejection as a new billable event.
+
+## Optional automatic renewal
+
+Existing subscriptions continue to use payment links. Stripe automatic renewal is opt-in and collects on the merchant's own Stripe account, including supported Connect accounts. Configure a terms-of-service URL on that Stripe account before requesting consent.
+
+1. Call `POST /v1/usage-billing/subscriptions/{id}/auto-renew/setup` with `credentialConfigId`, an HTTPS `successUrl` and an HTTPS `cancelUrl`.
+2. Share the returned Stripe-hosted URL with the customer. They must accept the recurring-payment terms and save their own card on Stripe. A merchant must not complete consent on a customer's behalf.
+3. Completed setup sessions are verified automatically. You may also call `/auto-renew/confirm` with the returned `setupId` to refresh. The browser return URL alone never proves consent.
+4. Renewals use a persisted, account-bound invoice attempt. `GET /v1/usage-billing/subscriptions/{id}/payments/history` shows the attempt status and exact decimal amounts.
+
+`POST .../auto-renew/disable` stops future automatic renewal. Cancelling the subscription continues to use `POST .../cancel`, with final accrued usage handled by the existing billing lifecycle. Disabling renewal does not reverse a payment already processing.
+
+An `unknown` payment is reconciled before any recovery. Never issue another charge or invoice to work around it. For confirmed failures or customer authentication requirements, `POST .../payments/recover` cancels the original intent when safe and makes a hosted payment link available. It cannot bypass an uncertain or processing payment.
+
+## Customer notifications
+
+Use `POST /v1/usage-billing/subscriptions/{id}/notifications` with `enabled`, `locale` (`en` or `uk`) and a customer billing `email` when enabling. Messages cover invoices, upcoming renewals, low included credits and payment failures. Email addresses are not echoed by the API. Test-mode messages are visibly marked as tests.
+
+For your own OrsunPay platform subscription, open **Billing** in the merchant cabinet.

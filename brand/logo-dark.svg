@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 206 36" width="206" height="36" role="img" aria-label="OrsunPay" fill="none">
+<title>OrsunPay</title><g transform="translate(0 2) scale(.146)"><defs><mask id="weave" maskUnits="userSpaceOnUse" x="0" y="0" width="340" height="240"><rect width="340" height="240" fill="white"/><path d="M144 36L224 116M116 80L196 160" stroke="black" stroke-width="4"/></mask></defs>
+<path d="M163 110H205V186C205 196 194 201 184 207L169 216C166 218 163 216 163 212Z" fill="#f6f5ed"/>
+<path d="M170 98C143 69 128 42 93 42C62 42 37 67 37 98C37 129 62 154 93 154C128 154 143 127 170 98C197 69 212 42 247 42C278 42 303 67 303 98C303 129 278 154 247 154C212 154 197 127 170 98" stroke="#ffcc00" stroke-width="48" stroke-linejoin="round" mask="url(#weave)"/>
+</g><text x="57" y="28" fill="#f6f5ed" font-family="Arial,Helvetica,sans-serif" font-size="31" font-weight="650" letter-spacing="-1.4">OrsunPay</text></svg>

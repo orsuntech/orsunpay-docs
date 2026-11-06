@@ -1,0 +1,114 @@
+---
+title: Routing and connection selection
+sidebarTitle: Routing and cascading
+description: How OrsunPay chooses a provider connection for a sale or payout, and what happens when a provider declines.
+---
+
+A **connection** (credential configuration, ID prefix `cr_`) is one of your provider accounts as
+configured in OrsunPay: provider, mode (sandbox or live), payment-method type, currencies, amount
+limits and optional conditions. Every sale or payout is dispatched through exactly one connection.
+
+## Selection for a sale
+
+### You name the connection
+
+Send `paymentMethod` with the connection ID provided for your merchant. OrsunPay loads that
+connection and checks, in order:
+
+1. it belongs to your merchant, is active and matches the mode of your API key
+   (a mismatch returns 400 `NO_CREDENTIALS_FOR_MODE`);
+2. its [metadata rules](#metadata-rules) and allowed countries match the request;
+3. the operator payment policy and sale availability for that connection;
+4. the currency is allowed (`PAYMENT_INPUT_CURRENCY_NOT_ALLOWED` otherwise) and the amount is within
+   the connection's inclusive minimum and maximum ("Amount is out of range" otherwise).
+
+If the connection is missing, inactive or its conditions do not match, the business error is
+"Credential config not found". OrsunPay does not substitute another connection.
+
+### The buyer chooses on the hosted payment page
+
+Omit `paymentMethod` and the sale opens the [hosted payment page](/hosted-payment-page). Without
+hosted checkout the request fails with `PAYMENT_METHOD_REQUIRED`. OrsunPay builds the list of
+methods offered to the buyer:
+
+1. Take your active, sale-enabled connections in the API key's mode, filtered by payment policy.
+   None at all returns 400 `NO_CREDENTIALS_FOR_MODE`.
+2. Order them by **sort order** (ascending, lower first), then creation time, then ID.
+3. Keep **one connection per payment-method type**: the first connection in that order whose
+   conditions, currency and amount limits accept the sale. A connection that fails its checks does
+   not take its type's slot, so the next eligible one of the same type is used.
+4. If nothing is eligible, the response is `NO_PAYMENT_METHODS`.
+
+The page can hide a method whose provider requires buyer contact details that the sale does not
+contain. The buyer's choice fixes the method type, and with it the connection selected above.
+
+### Payouts
+
+A payout always requires `paymentMethod`; there is no hosted selection. The same mode, condition,
+currency and amount checks apply, using the connection's payout limits. See [payouts](/payouts).
+
+## Metadata rules
+
+Operators can attach metadata rules to a connection. They compare fields of the `metadata` object
+you send on the sale:
+
+```json
+{
+  "metadata": {
+    "segment": "vip",
+    "depositCount": 3,
+    "trusted": true
+  }
+}
+```
+
+- Operators: `eq`, `ne`, `gt`, `lt`, `in`, `not_in`. A connection has at most 20 rules and an
+  `in`/`not_in` list at most 20 values.
+- All rules on a connection must match (logical AND). An empty rule list matches every sale.
+- Matching is strictly typed: `"5"` does not equal `5`. `gt` and `lt` match only numbers.
+- A missing field, or a value that is not a string (up to 256 characters), boolean or finite
+  number, fails the rule, including `ne` and `not_in`.
+- Allowed countries are compared with `customer.country` (ISO 3166-1 alpha-2). The country is
+  never derived from the buyer's IP address. An empty list means no restriction.
+
+Metadata values are **your assertions**, not verified risk signals. Set them only from your
+backend; the buyer's browser cannot add or override the metadata stored with the sale.
+
+## Who configures what
+
+| Setting                                 | Where                                  |
+| --------------------------------------- | -------------------------------------- |
+| `paymentMethod`, `metadata`, `customer` | Your API request                       |
+| Connection credentials and settings     | Merchant cabinet → Connections           |
+| Sort order and metadata rules           | Operator backoffice → Connections      |
+| Payment policy                          | Operator (read-only in the cabinet)    |
+
+## Declines and cascading
+
+**OrsunPay does not cascade a payment to another connection.** If the provider rejects the
+request, the transaction becomes `DECLINED`. If the provider's answer is unknown, it stays
+`PROCESSING` with `errorCode: PSP_OUTCOME_UNKNOWN`. Neither case retries through a different
+connection or provider, and the buyer is not moved to another provider.
+
+On the hosted payment page, once a submission may have reached the provider, the payment stays
+with that method and provider. The buyer can switch method only when the failure happened before
+the provider was contacted.
+
+To try a different method after a decline, create a new sale with a new `orderId` and a new
+`Idempotency-Key`. Never do this while the first payment is still `PROCESSING`. A declined,
+canceled or expired sale can still turn into `SUCCESS` if the provider later reports that money was
+taken, so keep processing webhooks for the first sale and reconcile (for example, refund one of
+the two) if both succeed. See [Transaction statuses](/payments#transaction-statuses).
+
+## Routing flows in the merchant cabinet
+
+The merchant cabinet has a **Routing** page where users with connection permissions can draft,
+validate, simulate, publish and roll back routing flows (conditions on method, currency, country,
+amount and metadata; ordered or weighted distribution across connections). Publishing requires
+MFA.
+
+A published flow changes selection only where the routing runtime is enabled for your deployment;
+otherwise the selection described above applies unchanged. When enabled, a flow applies to hosted
+payment page method selection and does not apply to sales with an explicit `paymentMethod` or to
+payouts. Flows do not add cascading. Confirm with your OrsunPay contact whether the routing runtime
+is enabled for your account before relying on a published flow.
